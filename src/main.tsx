@@ -1,11 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@/styles/globals.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
 
 createRoot(root).render(
   <StrictMode>
-    <h1>Monolith Frontend — scaffold</h1>
+    <h1 className="p-8 text-2xl font-bold">Monolith Frontend — scaffold</h1>
   </StrictMode>,
 );
