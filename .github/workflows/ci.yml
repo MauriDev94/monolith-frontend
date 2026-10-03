@@ -37,12 +37,10 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      # FE-1-008 lands Vitest + a placeholder suite. Until that PR merges, this
-      # step is allowed to fail without blocking CI; remove the override once
-      # Vitest is in place.
+      # Vitest with `--passWithNoTests` exits 0 even when the suite is empty
+      # (placeholder PR2). PR5 raises the bar to a real 20–30 test suite.
       - name: Test
-        run: pnpm test --run
-        continue-on-error: true
+        run: pnpm test
 
       - name: Build
         run: pnpm build
