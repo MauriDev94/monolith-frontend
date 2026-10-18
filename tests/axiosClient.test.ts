@@ -76,8 +76,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
   it('does not attach Authorization when tokenStore is empty', async () => {
     tokenStore.clear();
     mock.onGet('/me').reply((config) => {
-      const auth =
-        config.headers?.authorization ?? config.headers?.Authorization;
+      const auth = config.headers?.authorization ?? config.headers?.Authorization;
       expect(auth).toBeUndefined();
       return [200, { id: 'u-1' }];
     });
@@ -91,10 +90,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let refreshCalls = 0;
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
-      return [
-        200,
-        { tokens: { access_token: 'new-access', refresh_token: 'new-refresh' } },
-      ];
+      return [200, { tokens: { access_token: 'new-access', refresh_token: 'new-refresh' } }];
     });
 
     mock.onGet('/a').replyOnce(401).onGet('/a').reply(200, { ok: 1 });
@@ -145,6 +141,22 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     expect(settled.every((s) => s.status === 'rejected')).toBe(true);
   });
 
+  it('posts the refresh with an empty JSON body', async () => {
+    // A bodyless POST fails the backend's request-model validation (400).
+    tokenStore.set('old-access');
+
+    let capturedBody: unknown;
+    refreshMock.onPost('/auth/v1/refresh').reply((config) => {
+      capturedBody = config.data;
+      return [200, { tokens: { access_token: 'new-access', refresh_token: 'new-refresh' } }];
+    });
+    mock.onGet('/me').replyOnce(401).onGet('/me').reply(200, {});
+
+    await axiosClient.get('/me');
+
+    expect(capturedBody).toBe('{}');
+  });
+
   it('does not loop forever when the retry itself 401s', async () => {
     tokenStore.set('old-access');
 
@@ -163,10 +175,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
       if (refreshCalls === 1) return [401];
-      return [
-        200,
-        { tokens: { access_token: 'later-access', refresh_token: 'later-refresh' } },
-      ];
+      return [200, { tokens: { access_token: 'later-access', refresh_token: 'later-refresh' } }];
     });
 
     // First 401 — first GET /x (refresh fails, request rejected).

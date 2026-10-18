@@ -1,17 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-import {
-  act,
-  cleanup,
-  render,
-  waitFor,
-} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { AxiosError } from 'axios';
 
 /**
@@ -98,8 +86,7 @@ vi.mock('@/auth/authEvents', () => ({
 }));
 
 vi.mock('react-router-dom', async () => {
-  const actual =
-    await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -114,10 +101,7 @@ import { authEvents } from '@/auth/authEvents';
 import { tokenStore } from '@/api/tokenStore';
 import type { MeResponse } from '@/api/authApi';
 import type { AuthContextValue } from '@/auth/AuthContext';
-import {
-  TEST_PASSWORD_LOGIN_OK,
-  TEST_PASSWORD_REGISTER_OK,
-} from './test-fixtures';
+import { TEST_PASSWORD_LOGIN_OK, TEST_PASSWORD_REGISTER_OK } from './test-fixtures';
 
 const USER: MeResponse = {
   id: 'u-1',
@@ -138,9 +122,7 @@ function CaptureAuth({ onValue }: { onValue: (v: AuthContextValue) => void }) {
   return null;
 }
 
-function getCaptured(
-  capturedRef: { current: AuthContextValue | null },
-): AuthContextValue {
+function getCaptured(capturedRef: { current: AuthContextValue | null }): AuthContextValue {
   if (capturedRef.current === null) {
     throw new Error('AuthProvider did not render a value');
   }
@@ -195,10 +177,7 @@ describe('AuthProvider — mount /me probe', () => {
     });
     expect(getCaptured(captured).user).toEqual(USER);
     expect(scheduleMock).toHaveBeenCalledTimes(1);
-    expect(scheduleMock).toHaveBeenCalledWith(
-      'access-from-cookie',
-      expect.any(Function),
-    );
+    expect(scheduleMock).toHaveBeenCalledWith('access-from-cookie', expect.any(Function));
   });
 
   it('transitions to "unauthenticated" when /me fails', async () => {
@@ -261,18 +240,13 @@ describe('AuthProvider — login()', () => {
     });
     expect(tokenStore.get()).toBe('fresh-access');
     expect(getCaptured(captured).user).toEqual(USER);
-    expect(scheduleMock).toHaveBeenCalledWith(
-      'fresh-access',
-      expect.any(Function),
-    );
+    expect(scheduleMock).toHaveBeenCalledWith('fresh-access', expect.any(Function));
     expect(navigateMock).toHaveBeenCalledWith('/todos', { replace: true });
   });
 
   it('honors `from` over the default /todos on navigation', async () => {
     // Mount probe: no session. Post-login /me: USER.
-    apiMeMock.mockImplementationOnce(() =>
-      Promise.reject(new Error('no session')),
-    );
+    apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
     apiLoginMock.mockResolvedValue({
       access_token: 'fresh-access',
@@ -303,9 +277,7 @@ describe('AuthProvider — login()', () => {
   });
 
   it('on 401: shows the localized toast and re-throws', async () => {
-    apiMeMock.mockImplementationOnce(() =>
-      Promise.reject(new Error('no session')),
-    );
+    apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
     apiLoginMock.mockRejectedValue(
       new AxiosError('Unauthorized', '401', undefined, undefined, {
@@ -335,16 +307,12 @@ describe('AuthProvider — login()', () => {
       ).rejects.toBeInstanceOf(AxiosError);
     });
 
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      'Email o contraseña incorrectos',
-    );
+    expect(toastErrorMock).toHaveBeenCalledWith('Email o contraseña incorrectos');
     expect(tokenStore.get()).toBeNull();
   });
 
   it('does NOT show the wrong-credentials toast on non-401 errors', async () => {
-    apiMeMock.mockImplementationOnce(() =>
-      Promise.reject(new Error('no session')),
-    );
+    apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
     apiLoginMock.mockRejectedValue(
       new AxiosError('Server', '500', undefined, undefined, {
@@ -380,9 +348,7 @@ describe('AuthProvider — login()', () => {
 
 describe('AuthProvider — register()', () => {
   it('on success: calls /register then immediately logs the user in', async () => {
-    apiMeMock.mockImplementationOnce(() =>
-      Promise.reject(new Error('no session')),
-    );
+    apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
     apiRegisterMock.mockResolvedValue({ id: 'u-new', email: 'new@example.com' });
     apiLoginMock.mockResolvedValue({
@@ -425,10 +391,7 @@ describe('AuthProvider — register()', () => {
     });
     expect(tokenStore.get()).toBe('new-access');
     expect(navigateMock).toHaveBeenCalledWith('/todos', { replace: true });
-    expect(scheduleMock).toHaveBeenCalledWith(
-      'new-access',
-      expect.any(Function),
-    );
+    expect(scheduleMock).toHaveBeenCalledWith('new-access', expect.any(Function));
   });
 });
 
@@ -523,23 +486,44 @@ describe('AuthProvider — authEvents unauthorized listener', () => {
     expect(getCaptured(captured).status).toBe('unauthenticated');
     expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
   });
+
+  it('does not navigate when "unauthorized" fires for an anonymous visitor', async () => {
+    // Anonymous boot: /me 401s, the interceptor's refresh fails and emits.
+    // A public page must stay where it is.
+    apiMeMock.mockRejectedValue(new AxiosError('Unauthorized'));
+
+    const captured = { current: null as AuthContextValue | null };
+    render(
+      <AuthProvider>
+        <CaptureAuth onValue={(v) => (captured.current = v)} />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getCaptured(captured).status).toBe('unauthenticated');
+    });
+    navigateMock.mockClear();
+
+    act(() => {
+      authEvents.emit('unauthorized');
+    });
+
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('useAuth', () => {
   it('throws when called outside an AuthProvider', () => {
     // Suppress React's error-boundary noise from the expected throw.
-    const consoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     function Naked() {
       useAuth();
       return null;
     }
 
-    expect(() => render(<Naked />)).toThrow(
-      'useAuth must be used within <AuthProvider>',
-    );
+    expect(() => render(<Naked />)).toThrow('useAuth must be used within <AuthProvider>');
 
     consoleError.mockRestore();
   });

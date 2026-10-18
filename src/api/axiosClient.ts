@@ -1,8 +1,4 @@
-import axios, {
-  AxiosError,
-  type AxiosInstance,
-  type InternalAxiosRequestConfig,
-} from 'axios';
+import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { env } from '@/lib/env';
 import { tokenStore } from '@/api/tokenStore';
 import { refreshClient } from '@/api/refreshClient';
@@ -45,9 +41,12 @@ async function refreshAccessToken(): Promise<string> {
   if (inflightRefresh === null) {
     inflightRefresh = (async () => {
       try {
+        // Empty JSON body on purpose: the backend declares an (all-optional)
+        // request model, so a bodyless POST fails validation with 400. The
+        // refresh token itself travels in the HttpOnly cookie.
         const { data } = await refreshClient.post<{
           tokens: { access_token: string; refresh_token: string };
-        }>('/auth/v1/refresh');
+        }>('/auth/v1/refresh', {});
         const newAccess = data.tokens.access_token;
         tokenStore.set(newAccess);
         return newAccess;
@@ -62,7 +61,7 @@ async function refreshAccessToken(): Promise<string> {
 }
 
 export const axiosClient: AxiosInstance = axios.create({
-  baseURL: env.VITE_API_URL,
+  baseURL: env.API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -77,26 +76,19 @@ axiosClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-axiosClient.interceptors.response.use(
-  undefined,
-  async (error: AxiosError) => {
-    const original = error.config as RetriedConfig | undefined;
-    if (
-      error.response?.status !== 401 ||
-      !original ||
-      original._retried
-    ) {
-      throw error;
-    }
-    original._retried = true;
+axiosClient.interceptors.response.use(undefined, async (error: AxiosError) => {
+  const original = error.config as RetriedConfig | undefined;
+  if (error.response?.status !== 401 || !original || original._retried) {
+    throw error;
+  }
+  original._retried = true;
 
-    try {
-      const newAccess = await refreshAccessToken();
-      original.headers.set('Authorization', `Bearer ${newAccess}`);
-      return axiosClient(original);
-    } catch (refreshErr) {
-      authEvents.emit('unauthorized');
-      throw refreshErr;
-    }
-  },
-);
+  try {
+    const newAccess = await refreshAccessToken();
+    original.headers.set('Authorization', `Bearer ${newAccess}`);
+    return axiosClient(original);
+  } catch (refreshErr) {
+    authEvents.emit('unauthorized');
+    throw refreshErr;
+  }
+});

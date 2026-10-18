@@ -25,13 +25,25 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  * JSON because the backend accepts a `UserCreateRequest` JSON body.
  */
 
-/** Shape of `GET /auth/v1/me` response. Hand-rolled until PR4 codegen lands. */
+/**
+ * The authenticated user (backend `AuthUserResponse`). Hand-rolled until PR4
+ * codegen lands. `birthdate` is null for users created through Google SSO.
+ */
 export interface MeResponse {
   id: string;
   email: string;
   name: string;
   lastname: string;
-  birthdate: string;
+  birthdate: string | null;
+}
+
+/**
+ * Wire shape of `GET /auth/v1/me` and `POST /auth/v1/register`: the backend
+ * wraps the user in a `user` envelope. The wrappers unwrap it so callers get
+ * a plain `MeResponse`.
+ */
+interface UserEnvelope {
+  user: MeResponse;
 }
 
 /** Shape of `POST /auth/v1/login` response. */
@@ -39,12 +51,6 @@ export interface LoginResponse {
   access_token: string;
   refresh_token: string;
   token_type: string;
-}
-
-/** Shape of `POST /auth/v1/register` response. */
-export interface RegisterResponse {
-  id: string;
-  email: string;
 }
 
 /**
@@ -68,24 +74,19 @@ export async function login(values: LoginValues): Promise<LoginResponse> {
 /**
  * `POST /auth/v1/register` (JSON).
  *
- * The response is a `RegisterResponse` (no tokens). The caller is expected
- * to immediately call `login(values)` to bootstrap the session — see
+ * Returns the created user (no tokens). The caller is expected to
+ * immediately call `login(values)` to bootstrap the session — see
  * `AuthProvider.register()` (FE-2-005 in PR3b).
  */
-export async function register(
-  values: RegisterValues,
-): Promise<RegisterResponse> {
-  const { data } = await axiosClient.post<RegisterResponse>(
-    '/auth/v1/register',
-    {
-      name: values.name,
-      lastname: values.lastname,
-      email: values.email,
-      password: values.password,
-      birthdate: values.birthdate,
-    },
-  );
-  return data;
+export async function register(values: RegisterValues): Promise<MeResponse> {
+  const { data } = await axiosClient.post<UserEnvelope>('/auth/v1/register', {
+    name: values.name,
+    lastname: values.lastname,
+    email: values.email,
+    password: values.password,
+    birthdate: values.birthdate,
+  });
+  return data.user;
 }
 
 /**
@@ -101,11 +102,7 @@ export async function register(
  * regardless of the response.
  */
 export async function logout(): Promise<void> {
-  await axiosClient.post(
-    '/auth/v1/logout',
-    undefined,
-    { withCredentials: true },
-  );
+  await axiosClient.post('/auth/v1/logout', undefined, { withCredentials: true });
 }
 
 /**
@@ -116,6 +113,6 @@ export async function logout(): Promise<void> {
  * `authEvents.emit('unauthorized')` so the provider can clear state.
  */
 export async function me(): Promise<MeResponse> {
-  const { data } = await axiosClient.get<MeResponse>('/auth/v1/me');
-  return data;
+  const { data } = await axiosClient.get<UserEnvelope>('/auth/v1/me');
+  return data.user;
 }

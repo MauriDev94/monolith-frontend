@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
@@ -71,9 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // `src/api/refreshClient.ts`) and so cannot cascade.
   const onRefresh = useCallback(async () => {
     try {
+      // Empty JSON body: a bodyless POST fails the backend's request-model
+      // validation (400). See `refreshAccessToken` in `axiosClient.ts`.
       const { data } = await refreshClient.post<{
         tokens: { access_token: string; refresh_token: string };
-      }>('/auth/v1/refresh');
+      }>('/auth/v1/refresh', {});
       const newAccess = data.tokens.access_token;
       tokenStore.set(newAccess);
       // Re-schedule with the new token so the next refresh fires
@@ -132,12 +134,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('unauthenticated');
   }, [scheduler]);
 
+  // Latest status, readable from the `'unauthorized'` listener without
+  // re-subscribing on every status change.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
   // Subscribe to `authEvents` so the 401 interceptor can tear the SPA
   // down when refresh fails. The unsubscribe is returned by `on()`.
+  //
+  // Only a session that was actually lost redirects to `/login`. An
+  // anonymous visitor also triggers this event: the mount `/me` probe 401s,
+  // the refresh attempt fails for lack of a cookie, and the interceptor
+  // emits. Redirecting then would bounce every public page (`/register`,
+  // `/`) to `/login`. Protected routes still redirect via `RequireAuth`.
   useEffect(() => {
     return authEvents.on('unauthorized', () => {
+      const hadSession = statusRef.current === 'authenticated';
       cleanup();
-      navigate('/login', { replace: true });
+      if (hadSession) {
+        navigate('/login', { replace: true });
+      }
     });
   }, [cleanup, navigate]);
 

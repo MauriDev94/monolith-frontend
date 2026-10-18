@@ -13,7 +13,7 @@ import { env } from '@/lib/env';
  * same-origin and the cookie still travels.
  */
 export const refreshClient = axios.create({
-  baseURL: env.VITE_API_URL,
+  baseURL: env.API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
