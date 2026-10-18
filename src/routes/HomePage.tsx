@@ -13,7 +13,7 @@ export default function HomePage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">Monolith</h1>
           <p className="text-sm text-muted-foreground">
-            Welcome to the Monolith frontend. Pick an action to get started.
+            Organiza tus tareas en un solo lugar. Inicia sesión o crea una cuenta para empezar.
           </p>
         </div>
         <div className="flex gap-3">
@@ -21,13 +21,13 @@ export default function HomePage() {
             to="/login"
             className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
-            Log in
+            Iniciar sesión
           </Link>
           <Link
             to="/register"
             className="inline-flex h-10 items-center rounded-md border bg-background px-4 text-sm font-medium hover:bg-accent"
           >
-            Create account
+            Crear cuenta
           </Link>
         </div>
       </div>
