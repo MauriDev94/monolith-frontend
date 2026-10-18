@@ -55,3 +55,6 @@ Thumbs.db
 
 # Internal orchestrator docs (per-worktree; not part of the product)
 odd/
+
+# Playwright MCP snapshots, console logs and screenshots
+.playwright-mcp/
