@@ -11,10 +11,10 @@ import { Toaster } from '@/components/ui/sonner';
  *  1. `QueryClientProvider` — TanStack Query is shared across all routes.
  *     Mounted first so any child can call `useQuery`.
  *  2. `<Router />` — exports the data-router-driven `RouterProvider`.
- *     Internally it wraps `<AuthProvider>` around `<RouterProvider>` because
- *     `AuthProvider` calls `useNavigate` (post-login / post-logout / on the
- *     `'unauthorized'` event) and React Router requires that hook to live
- *     inside `<RouterProvider>`'s subtree.
+ *     `<AuthProvider>` is mounted by its root layout route, inside
+ *     `<RouterProvider>`, because `AuthProvider` calls `useNavigate`
+ *     (post-login / post-logout / on the `'unauthorized'` event) and React
+ *     Router requires that hook to live inside the router's subtree.
  *  3. `<Toaster />` — leaf component.
  *
  * If a future refactor splits `AuthProvider` away from the router, the
