@@ -3,10 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { authEvents } from '@/auth/authEvents';
-import {
-  createRefreshScheduler,
-  type RefreshScheduler,
-} from '@/auth/tokenRefreshScheduler';
+import { createRefreshScheduler, type RefreshScheduler } from '@/auth/tokenRefreshScheduler';
 import { tokenStore } from '@/api/tokenStore';
 import { refreshClient } from '@/api/refreshClient';
 import {
@@ -21,8 +18,8 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
 /**
  * Top-level auth state container.
  *
- * Mounted once near the React tree root (in `App.tsx`, which itself sits
- * inside `Routes` so children can use `useNavigate`).
+ * Mounted once by the root layout route in `routes.tsx`, inside
+ * `<RouterProvider>`, so it can call `useNavigate`.
  *
  * Responsibilities:
  *
@@ -64,10 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // One scheduler per mount. useMemo with `[]` guarantees the same
   // instance across renders so `schedule` / `cancel` calls hit the same
   // closure. The scheduler is cancelled on unmount (see effect below).
-  const scheduler = useMemo<RefreshScheduler>(
-    () => createRefreshScheduler(),
-    [],
-  );
+  const scheduler = useMemo<RefreshScheduler>(() => createRefreshScheduler(), []);
 
   // Proactive refresh callback. Fires when the scheduler's timer pops.
   // Calls `refreshClient.post('/auth/v1/refresh')` directly so we own the
@@ -162,8 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // `'unauthorized'` event (when the refresh attempt itself 401'd).
         // Our job here is to surface a localized error so the form knows
         // the submit did not succeed.
-        const status =
-          err instanceof AxiosError ? err.response?.status : undefined;
+        const status = err instanceof AxiosError ? err.response?.status : undefined;
         if (status === 401) {
           toast.error('Email o contraseña incorrectos');
         }

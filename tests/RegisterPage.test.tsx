@@ -37,9 +37,7 @@ describe('RegisterPage', () => {
     );
 
     expect(screen.getByTestId('register-form')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /iniciá sesión/i }),
-    ).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: /inicia sesión/i })).toHaveAttribute('href', '/login');
   });
 
   it('forwards ?from=<path> to the RegisterForm', () => {

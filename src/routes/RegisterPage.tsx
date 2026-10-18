@@ -22,17 +22,14 @@ export default function RegisterPage() {
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold">Crear cuenta</h1>
           <p className="text-sm text-muted-foreground">
-            Empezá a organizar tus tareas en segundos.
+            Empieza a organizar tus tareas en segundos.
           </p>
         </div>
         <RegisterForm from={from} />
         <p className="text-center text-sm text-muted-foreground">
-          ¿Ya tenés cuenta?{' '}
-          <Link
-            to="/login"
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Iniciá sesión
+          ¿Ya tienes cuenta?{' '}
+          <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+            Inicia sesión
           </Link>
         </p>
       </div>

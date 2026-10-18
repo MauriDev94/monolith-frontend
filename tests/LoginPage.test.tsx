@@ -37,9 +37,7 @@ describe('LoginPage', () => {
     );
 
     expect(screen.getByTestId('login-form')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /registrate/i }),
-    ).toHaveAttribute('href', '/register');
+    expect(screen.getByRole('link', { name: /regístrate/i })).toHaveAttribute('href', '/register');
   });
 
   it('forwards ?from=<path> to the LoginForm', () => {
