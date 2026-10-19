@@ -7,7 +7,7 @@ React SPA for the [Monolith](https://github.com/MauriDev94/Api_monolith) FastAPI
 ## Stack
 
 - **Build**: Vite + React 18 + TypeScript (strict)
-- **Styling**: Tailwind CSS + shadcn/ui primitives
+- **Styling**: Tailwind CSS + shadcn/ui primitives, "Grimorio" RPG theme with dark mode by default (`next-themes`, [ADR 0001](docs/adr/0001-rpg-visual-identity.md))
 - **Routing**: React Router 6
 - **Data**: TanStack Query (PR3+) + axios with single-flight 401 interceptor (PR3)
 - **Forms**: React Hook Form + Zod + shadcn `Form` (PR3+)

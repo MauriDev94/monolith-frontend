@@ -88,8 +88,12 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 
 ## Design
 
-- Theme tokens are HSL CSS variables in `src/styles/globals.css`; Tailwind has `darkMode: ['class']`. Change colors through the tokens, not hard-coded values.
-- Planned direction: RPG-style look, dark mode by default with a toggle (`next-themes` is installed but not wired yet). The palette and typography are still being chosen.
+- Visual identity "Grimorio" (ink, parchment, gold): see `docs/adr/0001-rpg-visual-identity.md`, which also records the two alternative directions.
+- Theme tokens are HSL CSS variables in `src/styles/globals.css` (`.dark` = default, `:root` = light). Use the tokens (`bg-card`, `text-primary`, `border-input`, `text-wine`…), never hard-coded colors. Keep text/background pairs at 4.5:1 or more.
+- Fonts: `font-display` (Cinzel; `h1`–`h3` default to it) and `font-sans` (Alegreya Sans), self-hosted via `@fontsource/*` imported in `src/main.tsx`.
+- Theme switching: `next-themes` in `App.tsx` (dark default, system preference ignored, key `monolith-theme`); the switch is `components/ThemeToggle.tsx` in the navbar. `index.html` ships `class="dark"` to avoid a light flash.
+- UI copy keeps the RPG voice (tasks are "misiones") in neutral Spanish with tú. Layouts must work at 390 px wide without horizontal scroll.
+- Feature ideas beyond the MVP (complete quests, XP, rarity, mascot) and their order live in `docs/roadmap.md`.
 
 ## Scope
 
