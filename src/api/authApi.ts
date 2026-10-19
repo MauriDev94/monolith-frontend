@@ -11,9 +11,9 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  *  - Request shapes (form-encoded vs JSON) live next to the URL, so the
  *    Content-Type / serialization mismatch on login (form) vs register (JSON)
  *    is impossible to forget.
- *  - Response types are co-located. Today these are hand-rolled; tomorrow
- *    openapi-typescript codegen (PR4 — FE-3-001) will replace the hand
- *    types with `paths['/auth/v1/login']['post']['responses']['200']` etc.
+ *  - Response types are co-located. Today these are hand-rolled; the
+ *    planned openapi-typescript codegen (locked decision #2) will replace the
+ *    hand types with `paths['/auth/v1/login']['post']['responses']['200']` etc.
  *
  * `axiosClient` carries the request interceptor that attaches
  * `Authorization: Bearer <access_token>` and the response interceptor that
@@ -76,7 +76,7 @@ export async function login(values: LoginValues): Promise<LoginResponse> {
  *
  * Returns the created user (no tokens). The caller is expected to
  * immediately call `login(values)` to bootstrap the session — see
- * `AuthProvider.register()` (FE-2-005 in PR3b).
+ * `AuthProvider.register()`.
  */
 export async function register(values: RegisterValues): Promise<MeResponse> {
   const { data } = await axiosClient.post<UserEnvelope>('/auth/v1/register', {

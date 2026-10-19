@@ -16,8 +16,7 @@ import { decodeJwtExp } from '@/auth/jwtDecode';
  * - **Idempotent on cancel**: calling it after the timer already cleared, or
  *   after a fire, is a no-op.
  *
- * See `design.md §tokenRefreshScheduler` and the spec scenarios under
- * `frontend-auth > Proactive Refresh Timer`.
+ * Implements locked decision #7 (see README.md).
  */
 
 export interface RefreshScheduler {

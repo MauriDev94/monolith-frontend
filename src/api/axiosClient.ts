@@ -26,7 +26,7 @@ import { authEvents } from '@/auth/authEvents';
  *       401s.
  *
  * Refresh uses the bare `refreshClient` (no interceptors) — otherwise the
- * refresh call could trigger a 401 cycle. See `design.md §axiosClient`.
+ * refresh call could trigger a 401 cycle (locked decision #4).
  *
  * Refresh contract: the backend returns `{ tokens: { access_token, refresh_token } }`
  * (RefreshTokenResponse in the OpenAPI schema). The browser ignores the
