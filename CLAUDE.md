@@ -94,7 +94,8 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 ## Scope
 
 - Locked decisions in `README.md` are not reopened without the user asking. In particular: no Google OAuth in the MVP, and todos are list + create only (edit/delete deferred).
-- The README mentions SDD artifacts under `openspec/changes/frontend-monolith/` in the backend repo. They are not checked into either repo, so treat `README.md` and the code as the source of truth.
+- The original SDD artifacts (OpenSpec proposal, specs, `design.md`) were not preserved. Code comments that cite them (`design.md §…`, `spec frontend-auth > …`, `FE-…` task IDs) point to documents that no longer exist; `README.md` and the code are the source of truth.
+- Record new architectural decisions as ADRs in `docs/adr/` (one short file per decision: context, decision, consequences).
 
 ## Git and PRs
 

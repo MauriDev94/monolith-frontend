@@ -2,7 +2,7 @@
 
 React SPA for the [Monolith](https://github.com/MauriDev94/Api_monolith) FastAPI backend.
 
-> **Status**: scaffold (PR2) and auth (PR3: login, register, logout, session refresh, auth-aware navbar) complete. Todos list + create (PR4) and the Vercel deploy (PR5) follow. See the SDD change `frontend-monolith` in the backend repo (`openspec/changes/frontend-monolith/`) for the full proposal, specs, and architectural decisions.
+> **Status**: scaffold (PR2) and auth (PR3: login, register, logout, session refresh, auth-aware navbar) complete. Todos list + create (PR4) and the Vercel deploy (PR5) follow. The original SDD artifacts (OpenSpec proposal, specs, design) were not preserved; the locked decisions below and the code comments are the source of truth. New architectural decisions go in `docs/adr/`.
 
 ## Stack
 
@@ -68,4 +68,3 @@ pnpm test           # vitest; PR5 wires the full 20–30 test suite
 ## Related
 
 - Backend repo: <https://github.com/MauriDev94/Api_monolith>
-- SDD change artifacts: `openspec/changes/frontend-monolith/` in the backend repo
