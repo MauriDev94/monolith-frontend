@@ -41,12 +41,10 @@ async function refreshAccessToken(): Promise<string> {
   if (inflightRefresh === null) {
     inflightRefresh = (async () => {
       try {
-        // Empty JSON body on purpose: the backend declares an (all-optional)
-        // request model, so a bodyless POST fails validation with 400. The
-        // refresh token itself travels in the HttpOnly cookie.
+        // No body: the refresh token travels in the HttpOnly cookie.
         const { data } = await refreshClient.post<{
           tokens: { access_token: string; refresh_token: string };
-        }>('/auth/v1/refresh', {});
+        }>('/auth/v1/refresh');
         const newAccess = data.tokens.access_token;
         tokenStore.set(newAccess);
         return newAccess;
