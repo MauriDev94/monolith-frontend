@@ -61,7 +61,7 @@ pnpm test           # vitest; PR5 wires the full 20–30 test suite
 ## Cookie transport notes
 
 - `refresh_token` is an HttpOnly cookie set by the backend with `SameSite=None; Secure` in production (mandatory for Vercel ↔ Render cross-origin).
-- In dev, `Secure=False` works because the browser grants a secure-context exception to `http://localhost`.
+- In dev the backend sends `SameSite=Lax` without `Secure` ([Api_monolith#127](https://github.com/MauriDev94/Api_monolith/pull/127)). Chromium browsers reject `SameSite=None` cookies that are not `Secure`, and `Lax` is enough because dev requests are same-origin through the Vite proxy.
 - The frontend NEVER reads `refresh_token` from `document.cookie`. The cookie is purely a transport for `/auth/v1/refresh`.
 - `LoginResponse.refresh_token` (in the JSON body) is also never read by the frontend — it exists for non-browser clients (mobile/CLI). The access token in the body is the only credential the SPA extracts.
 
