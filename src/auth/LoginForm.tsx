@@ -11,6 +11,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { authErrorMessage } from '@/auth/authErrors';
 import { loginSchema, type LoginValues } from '@/auth/schemas';
 import { useAuth } from '@/auth/useAuth';
 
@@ -21,8 +22,8 @@ import { useAuth } from '@/auth/useAuth';
  * Schema-validated via `@hookform/resolvers/zod`. The 401 toast for invalid
  * credentials is fired inside `AuthProvider` so this component does not
  * need to render its own toast for that case. Non-401 failures (network
- * errors, 500s) re-throw so the form can stop its submit spinner and let
- * the inline `<FormMessage>` surface the error.
+ * errors, 429, 500s) re-throw so the form can stop its submit spinner and
+ * show Spanish copy from `authErrorMessage` inline.
  *
  * The `from` prop is the URL to navigate to after a successful login. The
  * page (`LoginPage.tsx`) reads it from `useSearchParams().get('from')` and
@@ -43,10 +44,9 @@ export function LoginForm({ from }: { from?: string }) {
     try {
       await login(values, from);
     } catch (err) {
-      // 401 already toasted by AuthProvider. Anything else surfaces here.
-      setSubmitError(
-        err instanceof Error ? err.message : 'No se pudo iniciar sesión',
-      );
+      // 401 is already toasted by AuthProvider (null here); anything else
+      // surfaces inline in Spanish.
+      setSubmitError(authErrorMessage(err, 'login'));
     }
   });
 
@@ -60,12 +60,7 @@ export function LoginForm({ from }: { from?: string }) {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="tu@email.com"
-                  {...field}
-                />
+                <Input type="email" autoComplete="email" placeholder="tu@email.com" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -78,11 +73,7 @@ export function LoginForm({ from }: { from?: string }) {
             <FormItem>
               <FormLabel>Contraseña</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="current-password"
-                  {...field}
-                />
+                <Input type="password" autoComplete="current-password" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -97,11 +88,7 @@ export function LoginForm({ from }: { from?: string }) {
             {submitError}
           </p>
         ) : null}
-        <Button
-          type="submit"
-          disabled={form.formState.isSubmitting}
-          className="w-full"
-        >
+        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
           {form.formState.isSubmitting ? 'Ingresando...' : 'Ingresar'}
         </Button>
       </form>

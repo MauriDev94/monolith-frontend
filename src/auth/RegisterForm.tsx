@@ -11,6 +11,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { authErrorMessage } from '@/auth/authErrors';
 import { registerSchema, type RegisterValues } from '@/auth/schemas';
 import { useAuth } from '@/auth/useAuth';
 
@@ -51,10 +52,9 @@ export function RegisterForm({ from }: { from?: string }) {
       await register(values, from);
     } catch (err) {
       // 409 (email already registered) is a normal failure — surface inline.
-      // 500 / network errors also surface inline.
-      setSubmitError(
-        err instanceof Error ? err.message : 'No se pudo crear la cuenta',
-      );
+      // 500 / network errors also surface inline. Spanish copy, never the
+      // raw axios message.
+      setSubmitError(authErrorMessage(err, 'register'));
     }
   });
 
@@ -96,12 +96,7 @@ export function RegisterForm({ from }: { from?: string }) {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="tu@email.com"
-                  {...field}
-                />
+                <Input type="email" autoComplete="email" placeholder="tu@email.com" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -114,11 +109,7 @@ export function RegisterForm({ from }: { from?: string }) {
             <FormItem>
               <FormLabel>Contraseña</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  {...field}
-                />
+                <Input type="password" autoComplete="new-password" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -146,11 +137,7 @@ export function RegisterForm({ from }: { from?: string }) {
             {submitError}
           </p>
         ) : null}
-        <Button
-          type="submit"
-          disabled={form.formState.isSubmitting}
-          className="w-full"
-        >
+        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
           {form.formState.isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
         </Button>
       </form>
