@@ -2,7 +2,7 @@
 
 React SPA for the [Monolith](https://github.com/MauriDev94/Api_monolith) FastAPI backend.
 
-> **Status**: scaffold (PR2) and auth (PR3: login, register, logout, session refresh, auth-aware navbar) complete. Todos list + create (PR4) and the Vercel deploy (PR5) follow. The original SDD artifacts (OpenSpec proposal, specs, design) were not preserved; the locked decisions below and the code comments are the source of truth. New architectural decisions go in `docs/adr/`.
+> **Status**: scaffold (PR2), auth (PR3: login, register, logout, session refresh, auth-aware navbar), the "Grimorio" theme and todos list + create (PR4, the `/todos` quest log) complete. The Vercel deploy (PR5) is the last MVP item; later features are in [`docs/roadmap.md`](docs/roadmap.md). The original SDD artifacts (OpenSpec proposal, specs, design) were not preserved; the locked decisions below and the code comments are the source of truth. New architectural decisions go in `docs/adr/`.
 
 ## Stack
 

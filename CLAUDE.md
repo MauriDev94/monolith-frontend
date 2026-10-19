@@ -33,9 +33,11 @@ Docker Desktop's WSL VM is capped at 4 GB (`~/.wslconfig`). The machine has 16 G
 
 ```
 src/
-  api/          axios clients, typed endpoint wrappers, token store, query client
+  api/          axios clients, typed endpoint wrappers (authApi, todosApi), token store,
+                query client, apiErrors (Spanish copy for failed calls)
   auth/         AuthProvider, RequireAuth, forms, Zod schemas, refresh scheduler, events
-  components/   app components (Navbar, EmptyState, FullPageSkeleton) + ui/ (shadcn primitives)
+  todos/        quest log: CreateTodoForm, TodoCard, Zod schema, TanStack Query hooks
+  components/   app components (Navbar, ThemeToggle, EmptyState, Ornament…) + ui/ (shadcn primitives)
   routes/       router + one file per page
   lib/          env, cn() helper
   styles/       globals.css (Tailwind + shadcn HSL tokens)
@@ -50,12 +52,13 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 
 ### Auth flow
 
-- **Two axios clients.** `axiosClient` attaches `Authorization: Bearer` and refreshes on 401 with a single-flight promise (concurrent 401s share one `/refresh` call; the backend's reuse detection requires it). `refreshClient` has no interceptors and is used only for `/auth/v1/refresh`, which avoids recursion.
+- **Two axios clients.** `axiosClient` attaches `Authorization: Bearer` and refreshes on 401 with a single-flight promise (concurrent 401s share one `/refresh` call; the backend's reuse detection requires it). Login and register 401s skip the refresh (wrong credentials, not an expired token), and a failed refresh rethrows the original request's error. `refreshClient` has no interceptors and is used only for `/auth/v1/refresh`, which avoids recursion.
 - **Token storage.** The access token lives in a module variable (`api/tokenStore.ts`), never in React state or storage. The `user` lives in `AuthContext`.
 - **Refresh cookie.** The refresh token is an HttpOnly cookie that the frontend never reads. The backend sends `Secure; SameSite=None` in production and `SameSite=Lax` without `Secure` in dev (Api_monolith#127).
 - **Refresh body.** `/auth/v1/refresh` is posted without a body; the backend reads the cookie (bodyless requests accepted since Api_monolith#128).
 - **Proactive refresh.** `tokenRefreshScheduler` fires 60 s before the JWT `exp`.
 - **Forced logout.** `authEvents` emits `'unauthorized'` when a refresh fails. `AuthProvider` redirects to `/login` only if a session was active (it reads status through a ref). Anonymous visitors on `/` or `/register` must stay put.
+- **Logout clears the query cache.** `AuthProvider`'s cleanup calls `queryClient.clear()` so the next user on the same browser never sees the previous user's todos. Any new per-user query is covered automatically.
 - **Provider placement.** `AuthProvider` is mounted by the root layout route (`AuthLayout` in `routes/routes.tsx`), inside `RouterProvider`, because it calls `useNavigate`. Moving it above the router renders a blank page.
 
 ### Backend contract gotchas
@@ -63,8 +66,10 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 - `/auth/v1/me` and `/auth/v1/register` wrap the user: `{ "user": { … } }`. `authApi` unwraps it.
 - `/auth/v1/login` is `application/x-www-form-urlencoded` with `username` + `password` (OAuth2 password flow). Register is JSON.
 - `birthdate` is `null` for Google SSO users.
-- Validation errors come back as **400** (not 422) with `{ message, errors: [{ field, message, type }] }`.
-- Response types are hand-written in `api/authApi.ts` (openapi-typescript codegen is planned, not wired). When adding or changing a type, check it against the backend's `/openapi.json` or its Pydantic schemas. The mocked tests will not catch a wrong shape.
+- Validation errors come back as **400** (not 422) with `{ message, errors: [{ field, message, type }] }`. Domain rule violations (e.g. a todo `due_date` in the past) are also 400.
+- Never show `err.message` to users (axios messages are English). Use `apiErrorMessage(err, fallback)` from `api/apiErrors.ts`; handle endpoint-specific statuses first (see `auth/authErrors.ts`).
+- Todos: `GET /v1/todos?limit&offset` returns `{ todos, total, limit, offset }`, oldest first (`limit` 1–100). `POST /v1/todos` takes `{ title, description?, due_date? }` and returns `{ todo }`. Datetimes are ISO strings with a UTC offset.
+- Response types are hand-written in `api/authApi.ts` and `api/todosApi.ts` (openapi-typescript codegen is planned, not wired). When adding or changing a type, check it against the backend's `/openapi.json` or its Pydantic schemas. The mocked tests will not catch a wrong shape.
 
 ## Testing
 
