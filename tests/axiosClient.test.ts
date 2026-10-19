@@ -141,8 +141,9 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     expect(settled.every((s) => s.status === 'rejected')).toBe(true);
   });
 
-  it('posts the refresh with an empty JSON body', async () => {
-    // A bodyless POST fails the backend's request-model validation (400).
+  it('posts the refresh without a body', async () => {
+    // The refresh token travels in the HttpOnly cookie; the backend accepts a
+    // bodyless POST since Api_monolith#128.
     tokenStore.set('old-access');
 
     let capturedBody: unknown;
@@ -154,7 +155,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
 
     await axiosClient.get('/me');
 
-    expect(capturedBody).toBe('{}');
+    expect(capturedBody).toBeUndefined();
   });
 
   it('does not loop forever when the retry itself 401s', async () => {

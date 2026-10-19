@@ -71,11 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // `src/api/refreshClient.ts`) and so cannot cascade.
   const onRefresh = useCallback(async () => {
     try {
-      // Empty JSON body: a bodyless POST fails the backend's request-model
-      // validation (400). See `refreshAccessToken` in `axiosClient.ts`.
+      // No body: the refresh token travels in the HttpOnly cookie.
       const { data } = await refreshClient.post<{
         tokens: { access_token: string; refresh_token: string };
-      }>('/auth/v1/refresh', {});
+      }>('/auth/v1/refresh');
       const newAccess = data.tokens.access_token;
       tokenStore.set(newAccess);
       // Re-schedule with the new token so the next refresh fires
