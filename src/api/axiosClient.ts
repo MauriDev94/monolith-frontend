@@ -19,11 +19,16 @@ import { authEvents } from '@/auth/authEvents';
  *       exactly one `POST /auth/v1/refresh` is dispatched even if many
  *       requests 401 simultaneously.
  *     - On refresh success, retry the original request with the new
- *       `access_token`.
+ *       `access_token`. The retry's own outcome (success or error) is
+ *       returned as is; a failed retry never ends the session.
  *     - On refresh failure, emit `authEvents.emit('unauthorized')` (handled
- *       by `AuthProvider`) and rethrow the original error.
+ *       by `AuthProvider`) and rethrow the original 401, so callers see the
+ *       error of the request they made rather than the refresh's.
  *     - The `_retried` flag prevents an infinite loop if the retry itself
  *       401s.
+ *     - Credential endpoints (login, register) are skipped: their 401 means
+ *       "wrong credentials", not "expired access token", so there is
+ *       nothing to refresh.
  *
  * Refresh uses the bare `refreshClient` (no interceptors) — otherwise the
  * refresh call could trigger a 401 cycle (locked decision #4).
@@ -34,6 +39,15 @@ import { authEvents } from '@/auth/authEvents';
  */
 
 type RetriedConfig = InternalAxiosRequestConfig & { _retried?: boolean };
+
+/** Endpoints whose 401 is a credential failure, never an expired session. */
+const CREDENTIAL_PATHS = new Set(['/auth/v1/login', '/auth/v1/register']);
+
+function isCredentialRequest(config: InternalAxiosRequestConfig): boolean {
+  if (!config.url) return false;
+  // `url` is relative in practice; the dummy base also handles an absolute one.
+  return CREDENTIAL_PATHS.has(new URL(config.url, 'http://localhost').pathname);
+}
 
 let inflightRefresh: Promise<string> | null = null;
 
@@ -76,17 +90,26 @@ axiosClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 axiosClient.interceptors.response.use(undefined, async (error: AxiosError) => {
   const original = error.config as RetriedConfig | undefined;
-  if (error.response?.status !== 401 || !original || original._retried) {
+  if (
+    error.response?.status !== 401 ||
+    !original ||
+    original._retried ||
+    isCredentialRequest(original)
+  ) {
     throw error;
   }
   original._retried = true;
 
+  let newAccess: string;
   try {
-    const newAccess = await refreshAccessToken();
-    original.headers.set('Authorization', `Bearer ${newAccess}`);
-    return axiosClient(original);
-  } catch (refreshErr) {
+    newAccess = await refreshAccessToken();
+  } catch {
     authEvents.emit('unauthorized');
-    throw refreshErr;
+    throw error;
   }
+
+  // Outside the try: a failure of the retried request is that request's
+  // error, not a lost session.
+  original.headers.set('Authorization', `Bearer ${newAccess}`);
+  return axiosClient(original);
 });
