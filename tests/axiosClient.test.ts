@@ -220,4 +220,59 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     await expect(axiosClient.get('/network')).rejects.toThrow();
     expect(refreshCalls).toBe(0);
   });
+
+  it.each(['/auth/v1/login', '/auth/v1/register'])(
+    'does not refresh on a 401 from the credential endpoint %s',
+    async (path) => {
+      tokenStore.set('access');
+      const onUnauth = vi.fn();
+      const off = authEvents.on('unauthorized', onUnauth);
+
+      let refreshCalls = 0;
+      refreshMock.onPost('/auth/v1/refresh').reply(() => {
+        refreshCalls += 1;
+        return [200, { tokens: { access_token: 'x', refresh_token: 'y' } }];
+      });
+      mock.onPost(path).reply(401);
+
+      await expect(axiosClient.post(path, {})).rejects.toMatchObject({
+        response: { status: 401 },
+      });
+      expect(refreshCalls).toBe(0);
+      expect(onUnauth).not.toHaveBeenCalled();
+
+      off();
+    },
+  );
+
+  it('rethrows the original 401 (not the refresh error) when the refresh fails', async () => {
+    tokenStore.set('old-access');
+
+    refreshMock.onPost('/auth/v1/refresh').reply(429);
+    mock.onGet('/x').reply(401);
+
+    await expect(axiosClient.get('/x')).rejects.toMatchObject({
+      response: { status: 401 },
+      config: { url: '/x' },
+    });
+  });
+
+  it('does not end the session when the retried request fails after a successful refresh', async () => {
+    tokenStore.set('old-access');
+    const onUnauth = vi.fn();
+    const off = authEvents.on('unauthorized', onUnauth);
+
+    refreshMock.onPost('/auth/v1/refresh').reply(200, {
+      tokens: { access_token: 'new-access', refresh_token: 'new-refresh' },
+    });
+    mock.onGet('/flaky').replyOnce(401).onGet('/flaky').reply(500);
+
+    await expect(axiosClient.get('/flaky')).rejects.toMatchObject({
+      response: { status: 500 },
+    });
+    expect(onUnauth).not.toHaveBeenCalled();
+    expect(tokenStore.get()).toBe('new-access');
+
+    off();
+  });
 });
