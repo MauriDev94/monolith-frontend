@@ -10,7 +10,12 @@ const config: Config = {
       screens: { '2xl': '1400px' },
     },
     extend: {
+      fontFamily: {
+        display: ['Cinzel', 'Georgia', 'serif'],
+        sans: ['"Alegreya Sans"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+      },
       colors: {
+        wine: 'hsl(var(--wine))',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
