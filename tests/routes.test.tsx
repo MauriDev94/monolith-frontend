@@ -43,7 +43,9 @@ describe('Router — real route table', () => {
   it('renders the home page without throwing', async () => {
     render(<Router />);
 
-    expect(await screen.findByRole('heading', { name: 'Monolith' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Tu bitácora de misiones' }),
+    ).toBeInTheDocument();
   });
 
   it('renders the navbar in the root layout', async () => {

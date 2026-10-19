@@ -1,16 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-import {
-  cleanup,
-  render,
-  screen,
-} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -79,18 +68,10 @@ describe('Navbar — unauthenticated state', () => {
     renderNavbar();
 
     expect(screen.getByTestId('navbar-login-link')).toBeInTheDocument();
-    expect(screen.getByTestId('navbar-login-link')).toHaveAttribute(
-      'href',
-      '/login',
-    );
+    expect(screen.getByTestId('navbar-login-link')).toHaveAttribute('href', '/login');
     expect(screen.getByTestId('navbar-register-link')).toBeInTheDocument();
-    expect(screen.getByTestId('navbar-register-link')).toHaveAttribute(
-      'href',
-      '/register',
-    );
-    expect(
-      screen.queryByTestId('navbar-loading-skeleton'),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('navbar-register-link')).toHaveAttribute('href', '/register');
+    expect(screen.queryByTestId('navbar-loading-skeleton')).not.toBeInTheDocument();
     expect(screen.queryByTestId('navbar-user-email')).not.toBeInTheDocument();
     expect(screen.queryByTestId('navbar-logout-button')).not.toBeInTheDocument();
   });
@@ -99,7 +80,13 @@ describe('Navbar — unauthenticated state', () => {
 describe('Navbar — authenticated state', () => {
   it('renders the user email and a logout button, no skeleton, no links', () => {
     useAuthMock.mockReturnValue({
-      user: { id: 'u-1', email: 'jane@example.com', name: 'Jane', lastname: 'Doe', birthdate: '1990-05-12' },
+      user: {
+        id: 'u-1',
+        email: 'jane@example.com',
+        name: 'Jane',
+        lastname: 'Doe',
+        birthdate: '1990-05-12',
+      },
       status: 'authenticated',
       login: vi.fn(),
       register: vi.fn(),
@@ -108,13 +95,9 @@ describe('Navbar — authenticated state', () => {
 
     renderNavbar();
 
-    expect(screen.getByTestId('navbar-user-email')).toHaveTextContent(
-      'jane@example.com',
-    );
+    expect(screen.getByTestId('navbar-user-email')).toHaveTextContent('jane@example.com');
     expect(screen.getByTestId('navbar-logout-button')).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('navbar-loading-skeleton'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('navbar-loading-skeleton')).not.toBeInTheDocument();
     expect(screen.queryByTestId('navbar-login-link')).not.toBeInTheDocument();
     expect(screen.queryByTestId('navbar-register-link')).not.toBeInTheDocument();
   });
@@ -146,7 +129,13 @@ describe('Navbar — authenticated state', () => {
     const logoutMock = vi.fn().mockResolvedValue(undefined);
 
     useAuthMock.mockReturnValue({
-      user: { id: 'u-1', email: 'jane@example.com', name: 'Jane', lastname: 'Doe', birthdate: '1990-05-12' },
+      user: {
+        id: 'u-1',
+        email: 'jane@example.com',
+        name: 'Jane',
+        lastname: 'Doe',
+        birthdate: '1990-05-12',
+      },
       status: 'authenticated',
       login: vi.fn(),
       register: vi.fn(),
@@ -176,4 +165,32 @@ describe('Navbar — logo link', () => {
     const logo = screen.getByRole('link', { name: /monolith/i });
     expect(logo).toHaveAttribute('href', '/');
   });
+});
+
+describe('Navbar — theme toggle', () => {
+  it.each(['loading', 'unauthenticated', 'authenticated'] as const)(
+    'renders the theme toggle when status is %s',
+    async (status) => {
+      useAuthMock.mockReturnValue({
+        user:
+          status === 'authenticated'
+            ? {
+                id: 'u-1',
+                email: 'jane@example.com',
+                name: 'Jane',
+                lastname: 'Doe',
+                birthdate: null,
+              }
+            : null,
+        status,
+        login: vi.fn(),
+        register: vi.fn(),
+        logout: vi.fn(),
+      });
+
+      renderNavbar();
+
+      expect(await screen.findByTestId('theme-toggle')).toBeInTheDocument();
+    },
+  );
 });

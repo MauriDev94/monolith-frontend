@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { RegisterForm } from '@/auth/RegisterForm';
+import { Ornament } from '@/components/Ornament';
 
 /**
  * `/register` page.
@@ -17,13 +18,12 @@ export default function RegisterPage() {
   const from = searchParams.get('from') ?? undefined;
 
   return (
-    <main className="container flex min-h-[calc(100vh-3.5rem)] items-center justify-center py-12">
-      <div className="w-full max-w-md space-y-6">
-        <div className="space-y-2 text-center">
+    <main className="container flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-12 sm:px-8">
+      <div className="w-full max-w-md space-y-6 rounded-lg border bg-card p-6 shadow-lg shadow-black/20 sm:p-8">
+        <div className="space-y-3 text-center">
           <h1 className="text-2xl font-bold">Crear cuenta</h1>
-          <p className="text-sm text-muted-foreground">
-            Empieza a organizar tus tareas en segundos.
-          </p>
+          <Ornament />
+          <p className="text-muted-foreground">Empieza tu bitácora de misiones en segundos.</p>
         </div>
         <RegisterForm from={from} />
         <p className="text-center text-sm text-muted-foreground">

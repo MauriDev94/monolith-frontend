@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/auth/useAuth';
 
 /**
@@ -18,24 +20,29 @@ import { useAuth } from '@/auth/useAuth';
  *    one to `/register`.
  *
  * The logo always links to `/`, which is the public `HomePage` mounted in
- * PR3b2a.
+ * PR3b2a. The theme toggle renders in every auth state.
  */
 export function Navbar({ slot }: { slot?: ReactNode }) {
   const { user, status, logout } = useAuth();
 
   return (
-    <nav className="border-b bg-background">
-      <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="text-base font-semibold">
-          Monolith
+    // h-14 on the <nav> itself (border-box) so the border stays inside the
+    // 3.5rem the pages subtract in `min-h-[calc(100vh-3.5rem)]`.
+    <nav className="h-14 border-b border-primary/20 bg-card">
+      <div className="container flex h-full items-center justify-between gap-2 px-4 sm:px-8">
+        <Link
+          to="/"
+          className="flex items-center gap-2 font-display text-lg font-bold tracking-wide"
+        >
+          <BookOpen className="h-5 w-5 text-primary" aria-hidden="true" />
+          {/* Icon-only below `sm` so the auth buttons fit at phone width. */}
+          <span className="sr-only sm:not-sr-only">Monolith</span>
         </Link>
-        <div className="flex items-center gap-2" data-testid="navbar-slot">
+        <div className="flex items-center gap-1 sm:gap-2" data-testid="navbar-slot">
           {slot}
+          <ThemeToggle />
           {status === 'loading' ? (
-            <Skeleton
-              className="h-9 w-24"
-              data-testid="navbar-loading-skeleton"
-            />
+            <Skeleton className="h-9 w-24" data-testid="navbar-loading-skeleton" />
           ) : null}
           {status === 'authenticated' && user ? (
             <>
