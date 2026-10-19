@@ -2,7 +2,7 @@
 
 React SPA for the [Monolith](https://github.com/MauriDev94/Api_monolith) FastAPI backend.
 
-> **Status**: PR2 (frontend scaffold) complete. Auth wiring (PR3) and todos CRUD (PR4) follow. See the SDD change `frontend-monolith` in the backend repo (`openspec/changes/frontend-monolith/`) for the full proposal, specs, and architectural decisions.
+> **Status**: scaffold (PR2) and auth (PR3: login, register, logout, session refresh, auth-aware navbar) complete. Todos list + create (PR4) and the Vercel deploy (PR5) follow. See the SDD change `frontend-monolith` in the backend repo (`openspec/changes/frontend-monolith/`) for the full proposal, specs, and architectural decisions.
 
 ## Stack
 
@@ -40,7 +40,7 @@ cp .env.example .env.local       # adjust VITE_API_URL if needed
 pnpm dev                          # http://localhost:5173
 ```
 
-The Vite dev server proxies `/auth`, `/users`, and `/v1/todos` to `VITE_API_URL` (default `http://localhost:8000`). This avoids CORS preflight noise in dev while production relies on the backend's `CORS_ALLOWED_ORIGINS`.
+The Vite dev server proxies `/auth`, `/users`, and `/v1/todos` to `VITE_API_URL` (default `http://localhost:8000`). In dev the axios clients use relative URLs (`env.API_BASE_URL` is empty) so every request goes through this proxy: no CORS preflight, and the refresh cookie stays first-party. Production builds call `VITE_API_URL` directly and rely on the backend's `CORS_ALLOWED_ORIGINS`.
 
 ## Build & test
 

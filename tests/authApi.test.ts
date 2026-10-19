@@ -43,12 +43,8 @@ describe('authApi wrappers', () => {
     it('POSTs form-encoded credentials to /auth/v1/login', async () => {
       mock.onPost('/auth/v1/login').reply((config) => {
         expect(config.url).toBe('/auth/v1/login');
-        expect(config.headers?.['Content-Type']).toBe(
-          'application/x-www-form-urlencoded',
-        );
-        expect(config.data).toBe(
-          `username=user%40example.com&password=${TEST_PASSWORD_LOGIN_OK}`,
-        );
+        expect(config.headers?.['Content-Type']).toBe('application/x-www-form-urlencoded');
+        expect(config.data).toBe(`username=user%40example.com&password=${TEST_PASSWORD_LOGIN_OK}`);
         return [
           200,
           {
@@ -100,7 +96,18 @@ describe('authApi wrappers', () => {
           password: TEST_PASSWORD_REGISTER_OK,
           birthdate: '1990-05-12',
         });
-        return [201, { id: 'u-1', email: 'jane@example.com' }];
+        return [
+          201,
+          {
+            user: {
+              id: 'u-1',
+              email: 'jane@example.com',
+              name: 'Jane',
+              lastname: 'Doe',
+              birthdate: '1990-05-12',
+            },
+          },
+        ];
       });
 
       const { register } = await import('@/api/authApi');
@@ -155,7 +162,19 @@ describe('authApi wrappers', () => {
     it('GETs /auth/v1/me and returns the user', async () => {
       mock.onGet('/auth/v1/me').reply((config) => {
         expect(config.method).toBe('get');
-        return [200, { id: 'u-1', email: 'jane@example.com', name: 'Jane', lastname: 'Doe', birthdate: '1990-05-12' }];
+        // The backend wraps the user in a `user` envelope; `me()` unwraps it.
+        return [
+          200,
+          {
+            user: {
+              id: 'u-1',
+              email: 'jane@example.com',
+              name: 'Jane',
+              lastname: 'Doe',
+              birthdate: '1990-05-12',
+            },
+          },
+        ];
       });
 
       const { me } = await import('@/api/authApi');

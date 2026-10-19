@@ -46,11 +46,17 @@ describe('Router — real route table', () => {
     expect(await screen.findByRole('heading', { name: 'Monolith' })).toBeInTheDocument();
   });
 
-  it('navigates to the register page from the home CTA', async () => {
+  it('renders the navbar in the root layout', async () => {
+    render(<Router />);
+
+    expect(await screen.findByTestId('navbar-login-link')).toHaveAttribute('href', '/login');
+  });
+
+  it('navigates to the register page from the navbar CTA', async () => {
     const user = userEvent.setup();
     render(<Router />);
 
-    await user.click(await screen.findByRole('link', { name: 'Create account' }));
+    await user.click(await screen.findByTestId('navbar-register-link'));
 
     expect(await screen.findByRole('heading', { name: 'Crear cuenta' })).toBeInTheDocument();
   });
