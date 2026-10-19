@@ -4,6 +4,7 @@ import LoginPage from '@/routes/LoginPage';
 import RegisterPage from '@/routes/RegisterPage';
 import HomePage from '@/routes/HomePage';
 import NotFoundPage from '@/routes/NotFoundPage';
+import TodosPage from '@/routes/TodosPage';
 import { RequireAuth } from '@/auth/RequireAuth';
 import { Navbar } from '@/components/Navbar';
 
@@ -32,7 +33,7 @@ const router = createBrowserRouter([
       { path: '/register', element: <RegisterPage /> },
       {
         element: <RequireAuth />,
-        children: [{ path: '/todos', element: <RequireAuthPlaceholder /> }],
+        children: [{ path: '/todos', element: <TodosPage /> }],
       },
       { path: '*', element: <NotFoundPage /> },
     ],
@@ -45,15 +46,6 @@ function AuthLayout() {
       <Navbar />
       <Outlet />
     </AuthProvider>
-  );
-}
-
-function RequireAuthPlaceholder() {
-  return (
-    <main className="container py-12">
-      <h1 className="text-2xl font-bold">Todos</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Todos page lands in PR4.</p>
-    </main>
   );
 }
 
