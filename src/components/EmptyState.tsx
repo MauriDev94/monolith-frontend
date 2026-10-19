@@ -1,17 +1,23 @@
 import type { ReactNode } from 'react';
 
 /**
- * Empty-state placeholder.
- *
- * PR4 (todos list + create) replaces this with the real CTA: a "Crear mi primer todo"
- * button that focuses/scrolls to `<CreateTodoForm />`. The current shape
- * keeps every call site working with just heading + body.
+ * Empty-state panel: heading, optional body and an optional call to action
+ * (e.g. the todos page's "Escribir mi primera misión" button).
  */
-export function EmptyState({ heading, children }: { heading: string; children?: ReactNode }) {
+export function EmptyState({
+  heading,
+  children,
+  action,
+}: {
+  heading: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-input p-12 text-center">
       <h2 className="text-lg font-semibold">{heading}</h2>
       {children ? <div className="text-sm text-muted-foreground">{children}</div> : null}
+      {action ? <div className="pt-2">{action}</div> : null}
     </div>
   );
 }

@@ -38,7 +38,8 @@ export default function App() {
     >
       <QueryClientProvider client={queryClient}>
         <Router />
-        <Toaster richColors position="top-right" />
+        {/* Bottom-right so toasts never cover the navbar's account controls. */}
+        <Toaster richColors position="bottom-right" />
       </QueryClientProvider>
     </ThemeProvider>
   );
