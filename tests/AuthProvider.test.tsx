@@ -426,6 +426,30 @@ describe('AuthProvider — logout()', () => {
     expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
   });
 
+  it('drops cached queries so the next user never sees the previous data', async () => {
+    const { queryClient } = await import('@/api/queryClient');
+    queryClient.setQueryData(['todos'], { pages: [{ todos: [{ id: 't-1' }] }] });
+    apiMeMock.mockResolvedValue(USER);
+    tokenStore.set('current-access');
+
+    const captured = { current: null as AuthContextValue | null };
+    render(
+      <AuthProvider>
+        <CaptureAuth onValue={(v) => (captured.current = v)} />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getCaptured(captured).status).toBe('authenticated');
+    });
+
+    await act(async () => {
+      await getCaptured(captured).logout();
+    });
+
+    expect(queryClient.getQueryData(['todos'])).toBeUndefined();
+  });
+
   it('cleans up locally even when /logout fails on the server', async () => {
     apiMeMock.mockResolvedValue(USER);
     tokenStore.set('current-access');

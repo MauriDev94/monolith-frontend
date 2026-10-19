@@ -6,6 +6,7 @@ import { authEvents } from '@/auth/authEvents';
 import { createRefreshScheduler, type RefreshScheduler } from '@/auth/tokenRefreshScheduler';
 import { tokenStore } from '@/api/tokenStore';
 import { refreshClient } from '@/api/refreshClient';
+import { queryClient } from '@/api/queryClient';
 import {
   login as apiLogin,
   register as apiRegister,
@@ -125,6 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cleanup = useCallback(() => {
     scheduler.cancel();
     tokenStore.clear();
+    // Drop every cached query (todos, …) so the next user who logs in on
+    // this browser never sees the previous user's data, even for a frame.
+    queryClient.clear();
     setUser(null);
     setStatus('unauthenticated');
   }, [scheduler]);
