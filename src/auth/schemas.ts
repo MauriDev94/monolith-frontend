@@ -15,7 +15,7 @@ import { z } from 'zod';
  *   - birthdate: ISO date `YYYY-MM-DD`. The backend parses it via
  *     `datetime.fromisoformat` which accepts only this format.
  *
- * These schemas are imported by the React Hook Form forms (PR3b — FE-2-008)
+ * These schemas are imported by the React Hook Form forms (`LoginForm`, `RegisterForm`)
  * via `@hookform/resolvers/zod`. Keep them dependency-free of UI code so
  * they can be unit-tested in isolation.
  */

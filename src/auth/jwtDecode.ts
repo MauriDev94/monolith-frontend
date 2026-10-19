@@ -5,8 +5,8 @@
  * returns the `exp` claim as Unix seconds. The signature is **not** verified —
  * the server validated it at issue and we only need the timestamp to schedule
  * a proactive refresh. Re-checking locally would add complexity without
- * security value for an SPA. See `design.md §tokenRefreshScheduler` and
- * locked decision #7.
+ * security value for an SPA. See `tokenRefreshScheduler.ts` and locked
+ * decision #7.
  *
  * Throws on:
  * - Non-string input.

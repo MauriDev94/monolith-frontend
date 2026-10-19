@@ -25,7 +25,7 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  *
  *  1. **Session probe on mount** — `GET /auth/v1/me`. Sets `user` + status.
  *     `RequireAuth` uses this status to decide between skeleton, redirect,
- *     and outlet (see `FE-2-006`).
+ *     and outlet.
  *  2. **Login** — `POST /auth/v1/login` (form-encoded via `authApi.login`,
  *     which uses `axiosClient`). Stores the access token, fetches `/me`,
  *     schedules proactive refresh, navigates to `from ?? '/todos'`.
@@ -46,12 +46,8 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  *     session). Without this listener the user would sit on a half-broken
  *     page; with it, the SPA tears itself down deterministically.
  *
- * Design references:
- *   - `design.md §AuthProvider — Context + lifecycle`
- *   - `design.md §tokenRefreshScheduler`
- *   - spec `frontend-auth > Session Validation on Mount`,
- *     `User Login and Cookie-based Token Delivery > Invalid credentials`,
- *     `Logout Endpoint > Frontend logout side effects`.
+ * Implements locked decisions #6 (auth state split), #7 (proactive
+ * refresh) and #9 (real logout endpoint); see README.md.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthContextValue['user']>(null);
@@ -176,7 +172,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (status === 401) {
           toast.error('Email o contraseña incorrectos');
         }
-        // Re-throw so the calling form (FE-2-008) can stop its spinner
+        // Re-throw so the calling form (`LoginForm`, or `RegisterForm` via
+        // `register()`) can stop its spinner
         // and surface its own error UI for non-401 failures.
         throw err;
       }

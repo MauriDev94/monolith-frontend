@@ -4,8 +4,7 @@
  * The axios response interceptor (lives outside the React tree) needs to
  * notify the `AuthProvider` (lives inside the React tree) when a refresh
  * fails and the session must be torn down. A 30-line emitter is the
- * smallest seam that works at module load — see
- * `design.md §Decision: authEvents is a tiny module-scoped emitter`.
+ * smallest seam that works at module load.
  *
  * Currently one signal — `'unauthorized'` — flows in one direction
  * (interceptor → provider). The emitter is over-engineered for that single

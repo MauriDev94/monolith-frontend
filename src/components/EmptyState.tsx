@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 /**
  * Empty-state placeholder.
  *
- * PR4 (FE-3-005) replaces this with the real CTA: a "Crear mi primer todo"
+ * PR4 (todos list + create) replaces this with the real CTA: a "Crear mi primer todo"
  * button that focuses/scrolls to `<CreateTodoForm />`. The current shape
  * keeps every call site working with just heading + body.
  */
