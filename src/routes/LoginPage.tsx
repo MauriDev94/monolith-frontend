@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { LoginForm } from '@/auth/LoginForm';
+import { Ornament } from '@/components/Ornament';
 
 /**
  * `/login` page.
@@ -16,11 +17,12 @@ export default function LoginPage() {
   const from = searchParams.get('from') ?? undefined;
 
   return (
-    <main className="container flex min-h-[calc(100vh-3.5rem)] items-center justify-center py-12">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-2 text-center">
+    <main className="container flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-12 sm:px-8">
+      <div className="w-full max-w-sm space-y-6 rounded-lg border bg-card p-6 shadow-lg shadow-black/20 sm:p-8">
+        <div className="space-y-3 text-center">
           <h1 className="text-2xl font-bold">Iniciar sesión</h1>
-          <p className="text-sm text-muted-foreground">Ingresa con tu email y contraseña.</p>
+          <Ornament />
+          <p className="text-muted-foreground">Ingresa para continuar tu aventura.</p>
         </div>
         <LoginForm from={from} />
         <p className="text-center text-sm text-muted-foreground">

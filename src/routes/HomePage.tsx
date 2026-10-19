@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Ornament } from '@/components/Ornament';
 
 /**
  * Public landing page mounted at `/`.
@@ -8,27 +10,26 @@ import { Link } from 'react-router-dom';
  */
 export default function HomePage() {
   return (
-    <main className="container py-12">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Monolith</h1>
-          <p className="text-sm text-muted-foreground">
-            Organiza tus tareas en un solo lugar. Inicia sesión o crea una cuenta para empezar.
+    <main className="container px-4 py-16 sm:px-8 sm:py-24">
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-8 text-center">
+        <div className="space-y-4">
+          <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Monolith</p>
+          <h1 className="text-4xl font-bold leading-tight text-primary sm:text-5xl">
+            Tu bitácora de misiones
+          </h1>
+          <Ornament />
+          <p className="text-lg text-muted-foreground">
+            Organiza tus tareas en un solo lugar. Inicia sesión o crea una cuenta para empezar tu
+            aventura.
           </p>
         </div>
-        <div className="flex gap-3">
-          <Link
-            to="/login"
-            className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            to="/register"
-            className="inline-flex h-10 items-center rounded-md border bg-background px-4 text-sm font-medium hover:bg-accent"
-          >
-            Crear cuenta
-          </Link>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button asChild size="lg">
+            <Link to="/login">Iniciar sesión</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline">
+            <Link to="/register">Crear cuenta</Link>
+          </Button>
         </div>
       </div>
     </main>
