@@ -1,18 +1,7 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { AxiosError } from 'axios';
 import {
   TEST_PASSWORD_NO_DIGIT,
   TEST_PASSWORD_NO_LETTER,
@@ -64,10 +53,7 @@ async function fillValid() {
   await user.type(getInputByLabel(/^apellido$/i), VALID_PAYLOAD.lastname);
   await user.type(getInputByLabel(/^email$/i), VALID_PAYLOAD.email);
   await user.type(getInputByLabel(/^contraseña$/i), VALID_PAYLOAD.password);
-  await user.type(
-    getInputByLabel(/fecha de nacimiento/i),
-    VALID_PAYLOAD.birthdate,
-  );
+  await user.type(getInputByLabel(/fecha de nacimiento/i), VALID_PAYLOAD.birthdate);
 }
 
 describe('RegisterForm — rendering', () => {
@@ -80,15 +66,9 @@ describe('RegisterForm — rendering', () => {
     expect(getInputByLabel(/^email$/i).type).toBe('email');
     expect(getInputByLabel(/^contraseña$/i)).toBeInTheDocument();
     expect(getInputByLabel(/^contraseña$/i).type).toBe('password');
-    expect(
-      getInputByLabel(/fecha de nacimiento/i),
-    ).toBeInTheDocument();
-    expect(
-      getInputByLabel(/fecha de nacimiento/i).type,
-    ).toBe('date');
-    expect(
-      screen.getByRole('button', { name: /crear cuenta/i }),
-    ).toBeInTheDocument();
+    expect(getInputByLabel(/fecha de nacimiento/i)).toBeInTheDocument();
+    expect(getInputByLabel(/fecha de nacimiento/i).type).toBe('date');
+    expect(screen.getByRole('button', { name: /crear cuenta/i })).toBeInTheDocument();
   });
 });
 
@@ -100,16 +80,11 @@ describe('RegisterForm — schema validation', () => {
     await user.type(getInputByLabel(/^apellido$/i), VALID_PAYLOAD.lastname);
     await user.type(getInputByLabel(/^email$/i), VALID_PAYLOAD.email);
     await user.type(getInputByLabel(/^contraseña$/i), TEST_PASSWORD_NO_LETTER);
-    await user.type(
-      getInputByLabel(/fecha de nacimiento/i),
-      VALID_PAYLOAD.birthdate,
-    );
+    await user.type(getInputByLabel(/fecha de nacimiento/i), VALID_PAYLOAD.birthdate);
     await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/debe contener al menos una letra/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/debe contener al menos una letra/i)).toBeInTheDocument();
     });
     expect(registerMock).not.toHaveBeenCalled();
   });
@@ -121,16 +96,11 @@ describe('RegisterForm — schema validation', () => {
     await user.type(getInputByLabel(/^apellido$/i), VALID_PAYLOAD.lastname);
     await user.type(getInputByLabel(/^email$/i), VALID_PAYLOAD.email);
     await user.type(getInputByLabel(/^contraseña$/i), TEST_PASSWORD_NO_DIGIT);
-    await user.type(
-      getInputByLabel(/fecha de nacimiento/i),
-      VALID_PAYLOAD.birthdate,
-    );
+    await user.type(getInputByLabel(/fecha de nacimiento/i), VALID_PAYLOAD.birthdate);
     await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/debe contener al menos un número/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/debe contener al menos un número/i)).toBeInTheDocument();
     });
     expect(registerMock).not.toHaveBeenCalled();
   });
@@ -142,10 +112,7 @@ describe('RegisterForm — schema validation', () => {
     await user.type(getInputByLabel(/^apellido$/i), VALID_PAYLOAD.lastname);
     await user.type(getInputByLabel(/^email$/i), VALID_PAYLOAD.email);
     await user.type(getInputByLabel(/^contraseña$/i), VALID_PAYLOAD.password);
-    await user.type(
-      getInputByLabel(/fecha de nacimiento/i),
-      '05/12/1990',
-    );
+    await user.type(getInputByLabel(/fecha de nacimiento/i), '05/12/1990');
     await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
     await waitFor(() => {
@@ -180,7 +147,7 @@ describe('RegisterForm — submission', () => {
     expect(registerMock).toHaveBeenCalledWith(VALID_PAYLOAD, '/profile');
   });
 
-  it('renders an inline error when register rejects', async () => {
+  it('renders a generic Spanish inline error when register rejects', async () => {
     registerMock.mockRejectedValue(new Error('email already registered'));
 
     render(<RegisterForm />);
@@ -191,8 +158,32 @@ describe('RegisterForm — submission', () => {
     await waitFor(() => {
       expect(screen.getByTestId('register-submit-error')).toBeInTheDocument();
     });
-    expect(
-      screen.getByTestId('register-submit-error').textContent,
-    ).toMatch(/email already registered/i);
+    expect(screen.getByTestId('register-submit-error').textContent).toMatch(
+      /no se pudo crear la cuenta/i,
+    );
+  });
+
+  it('explains a duplicate email when register returns 409', async () => {
+    registerMock.mockRejectedValue(
+      new AxiosError(
+        'Request failed with status code 409',
+        'ERR_BAD_REQUEST',
+        undefined,
+        undefined,
+        {
+          status: 409,
+        } as never,
+      ),
+    );
+
+    render(<RegisterForm />);
+
+    await fillValid();
+    await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
+
+    expect(await screen.findByTestId('register-submit-error')).toHaveTextContent(
+      /ya existe una cuenta con ese email/i,
+    );
+    expect(screen.queryByText(/request failed/i)).not.toBeInTheDocument();
   });
 });

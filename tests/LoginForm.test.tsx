@@ -1,22 +1,8 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  TEST_PASSWORD_LOGIN_OK,
-  TEST_PASSWORD_SHORT,
-} from './test-fixtures';
+import { AxiosError } from 'axios';
+import { TEST_PASSWORD_LOGIN_OK, TEST_PASSWORD_SHORT } from './test-fixtures';
 
 /**
  * Tests for `LoginForm`.
@@ -70,9 +56,7 @@ describe('LoginForm — rendering', () => {
     expect(getEmailInput().type).toBe('email');
     expect(getPasswordInput()).toBeInTheDocument();
     expect(getPasswordInput().type).toBe('password');
-    expect(
-      screen.getByRole('button', { name: /ingresar/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ingresar/i })).toBeInTheDocument();
   });
 
   it('uses localized labels', () => {
@@ -154,9 +138,7 @@ describe('LoginForm — submission', () => {
     await user.click(screen.getByRole('button', { name: /ingresar/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /ingresando/i }),
-      ).toBeDisabled();
+      expect(screen.getByRole('button', { name: /ingresando/i })).toBeDisabled();
     });
   });
 
@@ -171,8 +153,47 @@ describe('LoginForm — submission', () => {
     await waitFor(() => {
       expect(screen.getByTestId('login-submit-error')).toBeInTheDocument();
     });
-    expect(
-      screen.getByTestId('login-submit-error').textContent,
-    ).toMatch(/no se pudo iniciar sesión/i);
+    expect(screen.getByTestId('login-submit-error').textContent).toMatch(
+      /no se pudo iniciar sesión/i,
+    );
+  });
+
+  it('shows no inline error on 401 (the provider toasts it)', async () => {
+    loginMock.mockRejectedValue(
+      new AxiosError(
+        'Request failed with status code 401',
+        'ERR_BAD_REQUEST',
+        undefined,
+        undefined,
+        {
+          status: 401,
+        } as never,
+      ),
+    );
+
+    render(<LoginForm />);
+
+    await fillValidCredentials();
+    await user.click(screen.getByRole('button', { name: /ingresar/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /ingresar/i })).toBeEnabled();
+    });
+    expect(screen.queryByTestId('login-submit-error')).not.toBeInTheDocument();
+    expect(screen.queryByText(/request failed/i)).not.toBeInTheDocument();
+  });
+
+  it('shows Spanish copy instead of the axios message on a network error', async () => {
+    loginMock.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+
+    render(<LoginForm />);
+
+    await fillValidCredentials();
+    await user.click(screen.getByRole('button', { name: /ingresar/i }));
+
+    expect(await screen.findByTestId('login-submit-error')).toHaveTextContent(
+      /no se pudo conectar con el servidor/i,
+    );
+    expect(screen.queryByText(/network error/i)).not.toBeInTheDocument();
   });
 });
