@@ -13,7 +13,7 @@ React SPA for the [Monolith](https://github.com/MauriDev94/Api_monolith) FastAPI
 - **Forms**: React Hook Form + Zod + shadcn `Form` (PR3+)
 - **API types**: openapi-typescript codegen (PR3+)
 - **Toasts**: Sonner
-- **Tests**: Vitest + happy-dom + @testing-library/react (PR5)
+- **Tests**: Vitest + happy-dom + @testing-library/react
 
 ## Architectural decisions (locked, do not reopen)
 
@@ -48,19 +48,25 @@ The Vite dev server proxies `/auth`, `/users`, and `/v1/todos` to `VITE_API_URL`
 pnpm build          # tsc --noEmit && vite build
 pnpm typecheck      # tsc --noEmit (no emit)
 pnpm lint           # eslint with --max-warnings 0
-pnpm test           # vitest; PR5 wires the full 20–30 test suite
+pnpm test           # vitest run
 ```
 
 ## Deploy (Vercel)
 
-- Import the repo in Vercel, framework preset **Vite**.
-- Set `VITE_API_URL=https://api-monolith.onrender.com` in **Environment Variables**.
-- Every PR gets a preview URL automatically.
+1. Import the repo in Vercel, framework preset **Vite**. Vercel picks up pnpm from `packageManager` in `package.json`.
+2. Set `VITE_API_URL=https://api-monolith.onrender.com` in **Environment Variables** before the first build. It is baked into the bundle at build time, so changing it later needs a redeploy.
+3. On Render, set `CORS_ALLOWED_ORIGINS` to the production Vercel origin as a JSON list: `["https://monolith-frontend.vercel.app"]` (exact origin, no trailing slash). Render restarts the API on save.
+
+Notes:
+
 - `vercel.json` ships SPA rewrites (so React Router handles hard reloads) plus security headers (`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`).
+- Every PR gets a preview URL, but previews cannot log in: their origins are not in the API's CORS allowlist.
+- The API sleeps on Render's free plan; the first request after a pause can take about 50 s.
+- Safari, iOS and Brave block the cross-site refresh cookie, so the session ends on reload there. See [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md) for the trade-off and the path forward.
 
 ## Cookie transport notes
 
-- `refresh_token` is an HttpOnly cookie set by the backend with `SameSite=None; Secure` in production (mandatory for Vercel ↔ Render cross-origin).
+- `refresh_token` is an HttpOnly cookie set by the backend with `SameSite=None; Secure` in production (mandatory for Vercel ↔ Render cross-site; browsers that block third-party cookies drop it, see [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md)).
 - In dev the backend sends `SameSite=Lax` without `Secure` ([Api_monolith#127](https://github.com/MauriDev94/Api_monolith/pull/127)). Chromium browsers reject `SameSite=None` cookies that are not `Secure`, and `Lax` is enough because dev requests are same-origin through the Vite proxy.
 - The frontend NEVER reads `refresh_token` from `document.cookie`. The cookie is purely a transport for `/auth/v1/refresh`.
 - `LoginResponse.refresh_token` (in the JSON body) is also never read by the frontend — it exists for non-browser clients (mobile/CLI). The access token in the body is the only credential the SPA extracts.

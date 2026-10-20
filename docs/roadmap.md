@@ -6,7 +6,7 @@ Ordered from most needed to most ambitious. Items 4 onward go beyond the MVP sco
 
 1. **Visual identity "Grimorio" + dark mode toggle.** Done (ADR 0001).
 2. **PR4: list and create quests (todos).** Done. `/todos` lists quests (paginated, "Cargar más misiones") and creates them with title, optional description and optional due date.
-3. **PR5: deploy to Vercel.** The last MVP item: the Vercel project and `VITE_API_URL`, plus `CORS_ALLOWED_ORIGINS` on Render (see `../BACKEND_PENDIENTES.md`, item 3).
+3. **PR5: deploy to Vercel.** The last MVP item: the Vercel project and `VITE_API_URL`, plus `CORS_ALLOWED_ORIGINS` on Render (steps in the README). The SPA calls the API cross-site; the trade-off is recorded in ADR 0002.
 
 ## Next
 
@@ -37,4 +37,6 @@ Ordered from most needed to most ambitious. Items 4 onward go beyond the MVP sco
 ## Known follow-ups
 
 - **React Router v7 future-flag warnings** in the dev console (`v7_startTransition`, …). Opt in to the flags in `routes.tsx` (chore).
+- **Session on Safari, iOS and Brave.** They block the cross-site refresh cookie, so the session ends on reload (ADR 0002). Fix: a custom domain for both apps, or test the `Partitioned` cookie attribute in the backend first.
+- **Cold-start feedback.** The API sleeps on Render's free plan and the first request can take about 50 s. A "despertando el servidor…" hint after a few seconds of waiting would explain the delay (frontend only).
 - **Quest order.** `GET /v1/todos` returns oldest first, so new quests land at the end of the list. A newest-first sort would need a backend `order` parameter (optional backend improvement).

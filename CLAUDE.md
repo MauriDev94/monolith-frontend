@@ -54,7 +54,7 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 
 - **Two axios clients.** `axiosClient` attaches `Authorization: Bearer` and refreshes on 401 with a single-flight promise (concurrent 401s share one `/refresh` call; the backend's reuse detection requires it). Login and register 401s skip the refresh (wrong credentials, not an expired token), and a failed refresh rethrows the original request's error. `refreshClient` has no interceptors and is used only for `/auth/v1/refresh`, which avoids recursion.
 - **Token storage.** The access token lives in a module variable (`api/tokenStore.ts`), never in React state or storage. The `user` lives in `AuthContext`.
-- **Refresh cookie.** The refresh token is an HttpOnly cookie that the frontend never reads. The backend sends `Secure; SameSite=None` in production and `SameSite=Lax` without `Secure` in dev (Api_monolith#127).
+- **Refresh cookie.** The refresh token is an HttpOnly cookie that the frontend never reads. The backend sends `Secure; SameSite=None` in production and `SameSite=Lax` without `Secure` in dev (Api_monolith#127). In production it is a third-party cookie (Vercel ↔ Render), so Safari, iOS and Brave drop it and the session ends on reload; ADR 0002 records why this is accepted for the MVP.
 - **Refresh body.** `/auth/v1/refresh` is posted without a body; the backend reads the cookie (bodyless requests accepted since Api_monolith#128).
 - **Proactive refresh.** `tokenRefreshScheduler` fires 60 s before the JWT `exp`.
 - **Forced logout.** `authEvents` emits `'unauthorized'` when a refresh fails. `AuthProvider` redirects to `/login` only if a session was active (it reads status through a ref). Anonymous visitors on `/` or `/register` must stay put.
