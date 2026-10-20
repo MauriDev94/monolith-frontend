@@ -10,12 +10,11 @@ Ordered from most needed to most ambitious. Items 4 onward go beyond the MVP sco
 
 ## Next
 
-4. **Complete a quest.** Mark a todo as done.
-   - This is the foundation for everything gamified: without completion there is nothing to reward.
-   - Needs: reopening locked decision #11 (today the MVP is list + create only).
-   - Backend: already supported (`PUT /v1/todos/{id}` with `is_completed`), so this is frontend only.
+4. **Complete a quest.** Done (ADR 0003). The seal on each card completes or reopens a quest; this is the foundation for everything gamified.
 5. **Level and XP in the navbar.** XP is earned by completing quests.
    - v1, frontend only: XP = completed × N, and the level comes from a threshold table. Derived on the client from the todos query.
+     - Caveat: the list is paginated, so the client only sees the completed quests on loaded pages. v1 either fetches every page (up to 100 per request) or waits for a server-side count.
+     - Reopening a quest must take its XP back, or the toggle becomes an XP farm (ADR 0003).
    - v2, backend: XP persisted per user plus achievements. Needs new endpoints, worked on in the backend session.
 6. **Quest rarity (Común / Rara / Épica).**
    - Backend: a new enum field on the `Todo` entity, with an Alembic migration, request/response schemas and tests. Track it in `../BACKEND_PENDIENTES.md` and implement it from the backend session.

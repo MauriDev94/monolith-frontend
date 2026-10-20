@@ -2,7 +2,7 @@
 
 React SPA for the [Monolith](https://github.com/MauriDev94/Api_monolith) FastAPI backend.
 
-> **Status**: scaffold (PR2), auth (PR3: login, register, logout, session refresh, auth-aware navbar), the "Grimorio" theme, todos list + create (PR4, the `/todos` quest log) and the Vercel deploy (PR5) complete: live at <https://monolith-frontend-delta.vercel.app>. Later features are in [`docs/roadmap.md`](docs/roadmap.md). The original SDD artifacts (OpenSpec proposal, specs, design) were not preserved; the locked decisions below and the code comments are the source of truth. New architectural decisions go in `docs/adr/`.
+> **Status**: scaffold (PR2), auth (PR3: login, register, logout, session refresh, auth-aware navbar), the "Grimorio" theme, todos list + create (PR4, the `/todos` quest log), the Vercel deploy (PR5) and completing quests (ADR 0003) complete: live at <https://monolith-frontend-delta.vercel.app>. Later features are in [`docs/roadmap.md`](docs/roadmap.md). The original SDD artifacts (OpenSpec proposal, specs, design) were not preserved; the locked decisions below and the code comments are the source of truth. New architectural decisions go in `docs/adr/`.
 
 ## Stack
 
@@ -29,7 +29,7 @@ The 12 decisions from the backend design session are immutable. One-line rationa
 8. **React Hook Form + Zod + shadcn `Form`** — same form layer across login, register, and create-todo.
 9. **Real logout endpoint** `POST /auth/v1/logout` (idempotent, clears cookie + revokes refresh tokens server-side).
 10. **Vercel free tier + free subdomain** `monolith-frontend-delta.vercel.app` (`monolith-frontend` was taken).
-11. **Phase 3 scope: list + create todos ONLY** — edit/delete deferred.
+11. **Phase 3 scope: list + create todos ONLY** — edit/delete deferred. Amended by [ADR 0003](docs/adr/0003-complete-quests.md): quests can also be completed and reopened.
 12. **Phase 4: 20–30 Vitest tests + Vercel deploy**.
 
 ## Local dev
