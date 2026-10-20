@@ -13,10 +13,21 @@ import type { Todo } from '@/api/todosApi';
  */
 const listTodosMock = vi.fn();
 const createTodoMock = vi.fn();
+const updateTodoMock = vi.fn();
+const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
 
 vi.mock('@/api/todosApi', () => ({
   listTodos: (...args: unknown[]) => listTodosMock(...args),
   createTodo: (...args: unknown[]) => createTodoMock(...args),
+  updateTodo: (...args: unknown[]) => updateTodoMock(...args),
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
 }));
 
 import TodosPage from '@/routes/TodosPage';
@@ -67,6 +78,9 @@ const user = userEvent.setup();
 beforeEach(() => {
   listTodosMock.mockReset();
   createTodoMock.mockReset();
+  updateTodoMock.mockReset();
+  toastSuccessMock.mockReset();
+  toastErrorMock.mockReset();
 });
 
 afterEach(() => {
@@ -187,5 +201,125 @@ describe('TodosPage — create', () => {
       expect(screen.getByTestId('create-todo-error')).toHaveTextContent(/revisa los datos/i);
     });
     expect(screen.getByLabelText('Nombre de la misión')).toHaveValue('Misión imposible');
+  });
+});
+
+describe('TodosPage — complete', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const seal = (title: string) =>
+    screen.findByRole('checkbox', { name: `Marcar como completada: ${title}` });
+
+  it('completes a quest optimistically, resending every field, and celebrates', async () => {
+    // An overdue quest with a description: both must survive the full-replace PUT.
+    const quest = todo(1, {
+      description: 'Antes del viernes',
+      due_date: '2026-10-01T03:00:00.123456Z',
+    });
+    listTodosMock.mockResolvedValue(page([quest], 1));
+    const server = deferred<Todo>();
+    updateTodoMock.mockReturnValue(server.promise);
+
+    renderPage();
+    const checkbox = await seal('Misión 1');
+    expect(checkbox).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(checkbox);
+
+    expect(updateTodoMock).toHaveBeenCalledWith('t-1', {
+      title: 'Misión 1',
+      description: 'Antes del viernes',
+      is_completed: true,
+      due_date: '2026-10-01T03:00:00.123456Z',
+    });
+    // Flipped before the server answers.
+    expect(checkbox).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Completada')).toBeInTheDocument();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+
+    server.resolve({ ...quest, is_completed: true });
+
+    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith('¡Misión cumplida!'));
+    expect(checkbox).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('reopens a completed quest without a celebration', async () => {
+    const quest = todo(1, { is_completed: true });
+    listTodosMock.mockResolvedValue(page([quest], 1));
+    updateTodoMock.mockResolvedValue({ ...quest, is_completed: false });
+
+    renderPage();
+    const checkbox = await seal('Misión 1');
+    await user.click(checkbox);
+
+    expect(updateTodoMock).toHaveBeenCalledWith(
+      't-1',
+      expect.objectContaining({ is_completed: false }),
+    );
+    await waitFor(() => expect(checkbox).toHaveAttribute('aria-checked', 'false'));
+    expect(screen.queryByText('Completada')).not.toBeInTheDocument();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it('rolls the quest back, shows Spanish copy and refetches when the update fails', async () => {
+    listTodosMock.mockResolvedValue(page([todo(1)], 1));
+    updateTodoMock.mockRejectedValue(httpError(500));
+
+    renderPage();
+    const checkbox = await seal('Misión 1');
+    await user.click(checkbox);
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        'El servidor tuvo un problema. Inténtalo de nuevo en unos minutos.',
+      ),
+    );
+    expect(checkbox).toHaveAttribute('aria-checked', 'false');
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(listTodosMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('only rolls back the quest that failed', async () => {
+    listTodosMock.mockResolvedValueOnce(page([todo(1), todo(2)], 2));
+    const first = deferred<Todo>();
+    updateTodoMock
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(todo(2, { is_completed: true }));
+    // The refetch after the failure must not hide a wrong rollback.
+    listTodosMock.mockReturnValue(new Promise(() => {}));
+
+    renderPage();
+    const one = await seal('Misión 1');
+    const two = await seal('Misión 2');
+    await user.click(one);
+    await user.click(two);
+    await waitFor(() => expect(two).toHaveAttribute('aria-checked', 'true'));
+
+    first.reject(httpError(500));
+
+    await waitFor(() => expect(one).toHaveAttribute('aria-checked', 'false'));
+    expect(two).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('ignores clicks while the quest is saving', async () => {
+    listTodosMock.mockResolvedValue(page([todo(1)], 1));
+    updateTodoMock.mockReturnValue(new Promise(() => {}));
+
+    renderPage();
+    const checkbox = await seal('Misión 1');
+    await user.click(checkbox);
+    await user.click(checkbox);
+
+    expect(updateTodoMock).toHaveBeenCalledTimes(1);
+    expect(checkbox).toHaveAttribute('aria-disabled', 'true');
+    expect(checkbox).toHaveAttribute('aria-checked', 'true');
   });
 });
