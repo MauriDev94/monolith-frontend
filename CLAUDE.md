@@ -1,6 +1,6 @@
 # CLAUDE.md — monolith-frontend
 
-React SPA for the Monolith FastAPI backend (`../monolith-backend`, GitHub repo `MauriDev94/Api_monolith`). Deployed on Vercel; the API runs on Render. `README.md` has the stack, the 12 locked architectural decisions and deploy notes. This file covers how to work in the repo. The workspace-level `dev/CLAUDE.md` rules (Git, secrets, no AI attribution) also apply.
+React SPA for the Monolith FastAPI backend (`../monolith-backend`, GitHub repo `MauriDev94/Api_monolith`). Deployed on Vercel (https://monolith-frontend-delta.vercel.app); the API runs on Render (https://api-monolith.onrender.com). `README.md` has the stack, the 12 locked architectural decisions and deploy notes. This file covers how to work in the repo. The workspace-level `dev/CLAUDE.md` rules (Git, secrets, no AI attribution) also apply.
 
 ## Commands
 

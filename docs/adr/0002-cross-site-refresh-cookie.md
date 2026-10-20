@@ -29,7 +29,7 @@ Three options were considered:
 Ship option 1 for the MVP deploy. It needs no code change and no backend change, and keeps locked decision #10.
 
 - Vercel: `VITE_API_URL=https://api-monolith.onrender.com`, baked in at build time.
-- Render: `CORS_ALLOWED_ORIGINS` set to the production Vercel origin as a JSON list, e.g. `["https://monolith-frontend.vercel.app"]` (exact origin, no trailing slash).
+- Render: `CORS_ALLOWED_ORIGINS` set to the production Vercel origin as a JSON list, today `["https://monolith-frontend-delta.vercel.app"]` (exact origin, no trailing slash).
 
 ## Consequences
 

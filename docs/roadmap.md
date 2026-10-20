@@ -6,7 +6,7 @@ Ordered from most needed to most ambitious. Items 4 onward go beyond the MVP sco
 
 1. **Visual identity "Grimorio" + dark mode toggle.** Done (ADR 0001).
 2. **PR4: list and create quests (todos).** Done. `/todos` lists quests (paginated, "Cargar más misiones") and creates them with title, optional description and optional due date.
-3. **PR5: deploy to Vercel.** The last MVP item: the Vercel project and `VITE_API_URL`, plus `CORS_ALLOWED_ORIGINS` on Render (steps in the README). The SPA calls the API cross-site; the trade-off is recorded in ADR 0002.
+3. **PR5: deploy to Vercel.** Done. Live at https://monolith-frontend-delta.vercel.app (steps in the README). The SPA calls the API cross-site; the trade-off is recorded in ADR 0002.
 
 ## Next
 
