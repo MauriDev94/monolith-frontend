@@ -11,7 +11,8 @@ import { useTodos } from '@/todos/useTodos';
 /**
  * `/todos` — the quest log (protected by `RequireAuth`).
  *
- * MVP scope (locked decision #11): list + create. The list is paginated
+ * Scope: list, create, and complete/reopen from each card (locked decision
+ * #11 as amended by ADR 0003; edit and delete are deferred). The list is paginated
  * server-side; "Cargar más misiones" fetches the next page.
  */
 export default function TodosPage() {

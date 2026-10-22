@@ -38,6 +38,24 @@ export interface CreateTodoInput {
   due_date?: string | null;
 }
 
+/**
+ * Body of `PUT /v1/todos/{id}`. It is a full replace, not a patch: the
+ * backend's `UpdateTodoRequest` defaults `description` and `due_date` to
+ * null, so leaving them out would clear them. Send every field.
+ */
+export interface UpdateTodoInput {
+  title: string;
+  description: string | null;
+  is_completed: boolean;
+  /**
+   * Resend the string the API returned, untouched. The backend skips its
+   * "not in the past" rule only when the date equals the stored one, so an
+   * overdue quest stays updatable; a `Date` round-trip could drop precision
+   * and turn the resend into a rejected new date.
+   */
+  due_date: string | null;
+}
+
 interface TodoEnvelope {
   todo: Todo;
 }
@@ -49,5 +67,10 @@ export async function listTodos(params: { limit: number; offset: number }): Prom
 
 export async function createTodo(input: CreateTodoInput): Promise<Todo> {
   const { data } = await axiosClient.post<TodoEnvelope>('/v1/todos', input);
+  return data.todo;
+}
+
+export async function updateTodo(id: string, input: UpdateTodoInput): Promise<Todo> {
+  const { data } = await axiosClient.put<TodoEnvelope>(`/v1/todos/${id}`, input);
   return data.todo;
 }

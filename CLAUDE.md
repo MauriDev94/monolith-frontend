@@ -69,6 +69,7 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 - Validation errors come back as **400** (not 422) with `{ message, errors: [{ field, message, type }] }`. Domain rule violations (e.g. a todo `due_date` in the past) are also 400.
 - Never show `err.message` to users (axios messages are English). Use `apiErrorMessage(err, fallback)` from `api/apiErrors.ts`; handle endpoint-specific statuses first (see `auth/authErrors.ts`).
 - Todos: `GET /v1/todos?limit&offset` returns `{ todos, total, limit, offset }`, oldest first (`limit` 1–100). `POST /v1/todos` takes `{ title, description?, due_date? }` and returns `{ todo }`. Datetimes are ISO strings with a UTC offset.
+- `PUT /v1/todos/{id}` is a full replace: send `title`, `description`, `is_completed` and `due_date`, or the missing ones are cleared. Resend `due_date` as the exact string the API returned; the backend rejects past dates unless they equal the stored one, so a `Date` round-trip can break updates on overdue quests (ADR 0003).
 - Response types are hand-written in `api/authApi.ts` and `api/todosApi.ts` (openapi-typescript codegen is planned, not wired). When adding or changing a type, check it against the backend's `/openapi.json` or its Pydantic schemas. The mocked tests will not catch a wrong shape.
 
 ## Testing
@@ -102,7 +103,7 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 
 ## Scope
 
-- Locked decisions in `README.md` are not reopened without the user asking. In particular: no Google OAuth in the MVP, and todos are list + create only (edit/delete deferred).
+- Locked decisions in `README.md` are not reopened without the user asking. In particular: no Google OAuth in the MVP, and todos are list + create + complete/reopen only (ADR 0003; edit/delete deferred).
 - The original SDD artifacts (OpenSpec proposal, specs, `design.md`) were not preserved. Code comments that cite them (`design.md §…`, `spec frontend-auth > …`, `FE-…` task IDs) point to documents that no longer exist; `README.md` and the code are the source of truth.
 - Record new architectural decisions as ADRs in `docs/adr/` (one short file per decision: context, decision, consequences).
 

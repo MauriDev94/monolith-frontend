@@ -67,4 +67,25 @@ describe('todosApi wrappers', () => {
     expect(body).toEqual({ title: TODO.title, description: null, due_date: null });
     expect(created).toEqual(TODO);
   });
+
+  it('updateTodo PUTs the full payload to the quest URL and unwraps { todo }', async () => {
+    const saved = { ...TODO, is_completed: true };
+    let body: unknown;
+    mock.onPut('/v1/todos/t-1').reply((config) => {
+      body = JSON.parse(config.data);
+      return [200, { todo: saved }];
+    });
+
+    const input = {
+      title: TODO.title,
+      description: 'Antes del viernes',
+      is_completed: true,
+      due_date: '2026-10-25T03:00:00.123456Z',
+    };
+    const updated = await todosApi.updateTodo('t-1', input);
+
+    // The date string travels untouched (microseconds included).
+    expect(body).toEqual(input);
+    expect(updated).toEqual(saved);
+  });
 });
