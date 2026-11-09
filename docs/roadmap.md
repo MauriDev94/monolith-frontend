@@ -36,6 +36,6 @@ Ordered from most needed to most ambitious. Items 4 onward go beyond the MVP sco
 ## Known follow-ups
 
 - **React Router v7 future-flag warnings** in the dev console (`v7_startTransition`, …). Opt in to the flags in `routes.tsx` (chore).
-- **Session on Safari, iOS and Brave.** They block the cross-site refresh cookie, so the session ends on reload (ADR 0002). Fix: a custom domain for both apps, or test the `Partitioned` cookie attribute in the backend first.
+- **Session on Safari, iOS and Brave.** They block the cross-site refresh cookie, so the session ends on reload (ADR 0002). Planned fix: proxy the API through Vercel so the cookie is first-party, per [ADR 0004](adr/0004-same-origin-api-proxy.md) (decided, not implemented; its order of work is listed there).
 - **Cold-start feedback.** The API sleeps on Render's free plan and the first request can take about 50 s. A "despertando el servidor…" hint after a few seconds of waiting would explain the delay (frontend only).
 - **Quest order.** `GET /v1/todos` returns oldest first, so new quests land at the end of the list. A newest-first sort would need a backend `order` parameter (optional backend improvement).

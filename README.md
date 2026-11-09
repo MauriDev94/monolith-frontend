@@ -62,11 +62,11 @@ Notes:
 - `vercel.json` ships SPA rewrites (so React Router handles hard reloads) plus security headers (`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`).
 - Every PR gets a preview URL, but previews cannot log in: their origins are not in the API's CORS allowlist.
 - The API sleeps on Render's free plan; the first request after a pause can take about 50 s.
-- Safari, iOS and Brave block the cross-site refresh cookie, so the session ends on reload there. See [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md) for the trade-off and the path forward.
+- Safari, iOS and Brave block the cross-site refresh cookie, so the session ends on reload there. See [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md) for the trade-off and the path forward. [ADR 0004](docs/adr/0004-same-origin-api-proxy.md) supersedes it and plans a same-origin proxy through Vercel; that proxy is **not live yet**.
 
 ## Cookie transport notes
 
-- `refresh_token` is an HttpOnly cookie set by the backend with `SameSite=None; Secure` in production (mandatory for Vercel ↔ Render cross-site; browsers that block third-party cookies drop it, see [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md)).
+- `refresh_token` is an HttpOnly cookie set by the backend with `SameSite=None; Secure` in production (mandatory for Vercel ↔ Render cross-site; browsers that block third-party cookies drop it, see [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md)). This describes today's behavior: [ADR 0004](docs/adr/0004-same-origin-api-proxy.md) supersedes ADR 0002 and plans a same-origin proxy with a `SameSite=Lax` cookie, **not implemented yet**.
 - In dev the backend sends `SameSite=Lax` without `Secure` ([Api_monolith#127](https://github.com/MauriDev94/Api_monolith/pull/127)). Chromium browsers reject `SameSite=None` cookies that are not `Secure`, and `Lax` is enough because dev requests are same-origin through the Vite proxy.
 - The frontend NEVER reads `refresh_token` from `document.cookie`. The cookie is purely a transport for `/auth/v1/refresh`.
 - `LoginResponse.refresh_token` (in the JSON body) is also never read by the frontend — it exists for non-browser clients (mobile/CLI). The access token in the body is the only credential the SPA extracts.
