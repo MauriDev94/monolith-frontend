@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { authEvents } from '@/auth/authEvents';
 import { createRefreshScheduler, type RefreshScheduler } from '@/auth/tokenRefreshScheduler';
 import { tokenStore } from '@/api/tokenStore';
-import { refreshClient } from '@/api/refreshClient';
+import { refreshAccessToken, isAuthFailure, IdentityChangedError } from '@/api/refreshAccessToken';
+import { decodeJwtSub } from '@/auth/jwtDecode';
 import { queryClient } from '@/api/queryClient';
 import {
   login as apiLogin,
@@ -15,6 +16,22 @@ import {
 } from '@/api/authApi';
 import { AuthContext, type AuthContextValue } from '@/auth/AuthContext';
 import type { LoginValues, RegisterValues } from '@/auth/schemas';
+
+/**
+ * Wait before retrying a proactive refresh that failed for a non-auth reason
+ * (offline, 5xx, 429). Long enough to ride out a blip or a rate-limit window,
+ * short enough to land well inside the 60 s lead before the token expires.
+ */
+const REFRESH_RETRY_DELAY_MS = 15_000;
+
+/**
+ * Floor for the delay when rescheduling after a refresh. If the client clock
+ * runs more than ~14 min ahead, the computed delay is always 0 and
+ * refresh → schedule(0) → refresh would loop and exhaust the per-IP refresh
+ * rate limit. Login and bootstrap scheduling have no floor, so an overdue
+ * timer on wake still fires immediately.
+ */
+const MIN_RESCHEDULE_DELAY_MS = 30_000;
 
 /**
  * Top-level auth state container.
@@ -41,11 +58,14 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  *     runs even when the network request fails because users MUST be able
  *     to log out offline.
  *  5. **Forced logout** — subscribes to `authEvents.on('unauthorized', …)`
- *     and runs the same cleanup. The 401 interceptor in `axiosClient`
- *     emits `'unauthorized'` when the proactive refresh fails (no valid
- *     refresh cookie / reuse detection triggered / server revoked the
- *     session). Without this listener the user would sit on a half-broken
- *     page; with it, the SPA tears itself down deterministically.
+ *     and runs the same cleanup. `'unauthorized'` is emitted only when a
+ *     refresh is rejected with 401/403 (no valid refresh cookie / reuse
+ *     detection / revoked session); a network error or 5xx keeps the session.
+ *     Without this listener the user would sit on a half-broken page; with
+ *     it, the SPA tears itself down deterministically.
+ *  6. **Refresh bookkeeping** — `'refreshed'` fires for every refresh,
+ *     proactive or reactive. The listener checks the token's `sub` against
+ *     the current user (identity switch → forced logout) and reschedules.
  *
  * Implements locked decisions #6 (auth state split), #7 (proactive
  * refresh) and #9 (real logout endpoint); see README.md.
@@ -60,32 +80,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // closure. The scheduler is cancelled on unmount (see effect below).
   const scheduler = useMemo<RefreshScheduler>(() => createRefreshScheduler(), []);
 
-  // Proactive refresh callback. Fires when the scheduler's timer pops.
-  // Calls `refreshClient.post('/auth/v1/refresh')` directly so we own the
-  // re-schedule loop without coupling to `axiosClient`'s internal
-  // `refreshAccessToken`. The interceptor on `axiosClient` is not
-  // involved: `refreshClient` is bare by construction (see
-  // `src/api/refreshClient.ts`) and so cannot cascade.
-  const onRefresh = useCallback(async () => {
-    try {
-      // No body: the refresh token travels in the HttpOnly cookie.
-      const { data } = await refreshClient.post<{
-        tokens: { access_token: string; refresh_token: string };
-      }>('/auth/v1/refresh');
-      const newAccess = data.tokens.access_token;
-      tokenStore.set(newAccess);
-      // Re-schedule with the new token so the next refresh fires
-      // 60s before the new exp. `onRefresh` is stable (closure over the
-      // memoized `scheduler`) so passing it back to `schedule` keeps the
-      // loop going.
-      scheduler.schedule(newAccess, onRefresh);
-    } catch {
-      // The 401 interceptor on `axiosClient` will emit `'unauthorized'`
-      // when any user-facing request 401s against the (now invalid)
-      // token store. The listener below runs the cleanup. Swallowing
-      // here keeps the scheduler from holding a stale timer.
+  // Pending retry of a failed proactive refresh (see `onRefresh`).
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearRetry = useCallback(() => {
+    if (retryTimer.current !== null) {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
     }
-  }, [scheduler]);
+  }, []);
+
+  // Proactive refresh callback. Fires when the scheduler's timer pops and goes
+  // through the same single-flight `refreshAccessToken` as the 401
+  // interceptor, so an overlapping reactive refresh shares the request. The
+  // new token is picked up by the `'refreshed'` listener below, which owns
+  // rescheduling for both paths.
+  const onRefresh = useCallback(async (): Promise<void> => {
+    try {
+      await refreshAccessToken();
+      return;
+    } catch (err) {
+      // Terminal: cleanup already ran and must not be re-armed by a retry.
+      if (err instanceof IdentityChangedError) return;
+      if (isAuthFailure(err)) {
+        authEvents.emit('unauthorized');
+        return;
+      }
+    }
+    // Network error, 5xx or 429: the session is fine, the server was just
+    // unreachable. Retry once after a bounded delay; if that fails too, the
+    // 401 interceptor is the next line of defense on the next request.
+    clearRetry();
+    retryTimer.current = setTimeout(() => {
+      retryTimer.current = null;
+      refreshAccessToken().catch((err: unknown) => {
+        if (!(err instanceof IdentityChangedError) && isAuthFailure(err)) {
+          authEvents.emit('unauthorized');
+        }
+      });
+    }, REFRESH_RETRY_DELAY_MS);
+  }, [clearRetry]);
 
   // Cancel the scheduler on unmount so a logout that happens during
   // a page transition (e.g., user navigates away) doesn't leave a
@@ -93,8 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return () => {
       scheduler.cancel();
+      clearRetry();
     };
-  }, [scheduler]);
+  }, [scheduler, clearRetry]);
 
   // Mount: probe session via /auth/v1/me. Transitions status from
   // `loading` to `authenticated` or `unauthenticated` based on the result.
@@ -121,22 +155,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [scheduler, onRefresh]);
 
+  // Latest status, readable from the `'unauthorized'` listener without
+  // re-subscribing on every status change.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const userRef = useRef(user);
+  userRef.current = user;
+
   // Centralized cleanup. Used by `logout()` AND by the `'unauthorized'`
   // listener so both paths produce identical post-conditions.
   const cleanup = useCallback(() => {
     scheduler.cancel();
+    clearRetry();
+    // Refs update synchronously: they otherwise lag until the next render, so
+    // a second event or a refresh landing in the same tick would still see an
+    // authenticated session.
+    statusRef.current = 'unauthenticated';
+    userRef.current = null;
     tokenStore.clear();
     // Drop every cached query (todos, …) so the next user who logs in on
     // this browser never sees the previous user's data, even for a frame.
     queryClient.clear();
     setUser(null);
     setStatus('unauthenticated');
-  }, [scheduler]);
-
-  // Latest status, readable from the `'unauthorized'` listener without
-  // re-subscribing on every status change.
-  const statusRef = useRef(status);
-  statusRef.current = status;
+  }, [scheduler, clearRetry]);
 
   // Subscribe to `authEvents` so the 401 interceptor can tear the SPA
   // down when refresh fails. The unsubscribe is returned by `on()`.
@@ -155,6 +197,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
   }, [cleanup, navigate]);
+
+  // Every successful refresh, proactive or reactive, lands here with the new
+  // token. Two jobs: (1) detect an identity switch and (2) rearm the timer.
+  //
+  // The refresh cookie can change under the SPA (login-CSRF, or another tab
+  // logging in as someone else). The next refresh then returns a token for
+  // user B while the UI still shows user A, and writes would go to B under A's
+  // email. `sub` is the user id, the same value as `id` in `/auth/v1/me`.
+  // No current user (bootstrap probe) means nothing to compare. An unreadable
+  // token fails closed.
+  useEffect(() => {
+    return authEvents.on('refreshed', (token) => {
+      // A refresh that resolved after logout must not revive the timer.
+      if (statusRef.current === 'unauthenticated') return;
+      // Any refresh supersedes a pending proactive retry.
+      clearRetry();
+      const current = userRef.current;
+      if (current !== null) {
+        let sub: string | null;
+        try {
+          sub = decodeJwtSub(token);
+        } catch {
+          sub = null;
+        }
+        if (sub !== current.id) {
+          cleanup();
+          toast.error('Tu sesión cambió. Vuelve a ingresar.');
+          navigate('/login', { replace: true });
+          return;
+        }
+      }
+      scheduler.schedule(token, onRefresh, MIN_RESCHEDULE_DELAY_MS);
+    });
+  }, [cleanup, navigate, scheduler, onRefresh, clearRetry]);
 
   const login = useCallback(
     async (values: LoginValues, from?: string): Promise<void> => {

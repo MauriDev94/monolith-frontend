@@ -12,38 +12,49 @@
  * "callback-from-axios-into-React" wiring from being a refactor later.
  */
 
-export type AuthEvent = 'unauthorized';
-
 /**
- * Internal type alias that documents the `(event, callback)` contract. Kept
- * private because no consumer needs to extend the bus with new types.
+ * Event name → payload type.
+ *
+ *  - `unauthorized` — a refresh failed with 401/403, the session is lost.
+ *  - `refreshed` — a refresh succeeded; the payload is the new access token.
+ *    Emitted from the single refresh path, so the provider reschedules the
+ *    proactive timer and checks the identity in one place whichever caller
+ *    (timer or 401 interceptor) triggered it.
  */
-type EventListener = () => void;
+export interface AuthEventMap {
+  unauthorized: undefined;
+  refreshed: string;
+}
+
+export type AuthEvent = keyof AuthEventMap;
+
+type EventListener<E extends AuthEvent> = (payload: AuthEventMap[E]) => void;
 
 /**
  * Per-event listener set. A `Set` makes add/delete idempotent and gives us
  * O(1) cleanup; the array snapshot on dispatch isolates the iteration from
  * re-entrant subscribe / unsubscribe calls.
  */
-const registry = new Map<AuthEvent, Set<EventListener>>();
+const registry = new Map<AuthEvent, Set<EventListener<AuthEvent>>>();
 
 /**
  * Register a listener for an auth event. Returns an unsubscribe function —
  * the caller is expected to invoke it on cleanup so listeners do not leak.
  *
  * @param event - The auth event to subscribe to.
- * @param cb - Zero-arg callback invoked when the event fires.
+ * @param cb - Callback invoked with the event payload when it fires.
  * @returns An unsubscribe function.
  */
-export function on(event: AuthEvent, cb: EventListener): () => void {
+export function on<E extends AuthEvent>(event: E, cb: EventListener<E>): () => void {
   let set = registry.get(event);
   if (!set) {
     set = new Set();
     registry.set(event, set);
   }
-  set.add(cb);
+  const listener = cb as EventListener<AuthEvent>;
+  set.add(listener);
   return () => {
-    set?.delete(cb);
+    set?.delete(listener);
   };
 }
 
@@ -58,14 +69,17 @@ export function on(event: AuthEvent, cb: EventListener): () => void {
  * subscriber crash the interceptor. Wrapping each listener keeps the bus
  * robust regardless of the runtime.
  */
-export function emit(event: AuthEvent): void {
+export function emit<E extends AuthEvent>(
+  event: E,
+  ...args: AuthEventMap[E] extends undefined ? [] : [payload: AuthEventMap[E]]
+): void {
   const set = registry.get(event);
   if (!set) return;
   // Snapshot the listener list before iterating so a handler that subscribes
   // or unsubscribes during dispatch does not perturb the loop.
   for (const listener of [...set]) {
     try {
-      listener();
+      listener(args[0] as AuthEventMap[AuthEvent]);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(`authEvents: listener for "${event}" threw`, err);

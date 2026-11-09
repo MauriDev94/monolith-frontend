@@ -31,8 +31,10 @@ export interface RefreshScheduler {
    *
    * @param token - A signed access JWT whose `exp` claim we trust for timing.
    * @param onRefresh - The refresh action (typically `refreshAccessToken`).
+   * @param minDelayMs - Floor for the delay (default 0). Used when rescheduling
+   *   after a refresh so a skewed client clock cannot make refreshes loop.
    */
-  schedule(token: string, onRefresh: () => Promise<void>): void;
+  schedule(token: string, onRefresh: () => Promise<void>, minDelayMs?: number): void;
 
   /**
    * Cancel any pending refresh timer. Safe to call multiple times.
@@ -46,7 +48,7 @@ export function createRefreshScheduler(): RefreshScheduler {
   let handle: ReturnType<typeof setTimeout> | null = null;
 
   return {
-    schedule(token, onRefresh) {
+    schedule(token, onRefresh, minDelayMs = 0) {
       // Always replace; the caller has no idea what is scheduled.
       if (handle !== null) {
         clearTimeout(handle);
@@ -55,7 +57,7 @@ export function createRefreshScheduler(): RefreshScheduler {
 
       const expSec = decodeJwtExp(token);
       const fireAtMs = expSec * 1000 - REFRESH_LEAD_MS;
-      const delayMs = Math.max(0, fireAtMs - Date.now());
+      const delayMs = Math.max(minDelayMs, fireAtMs - Date.now());
 
       handle = setTimeout(() => {
         // Null the handle before invoking so a synchronous reschedule from

@@ -275,4 +275,119 @@ describe('axiosClient — single-flight 401 interceptor', () => {
 
     off();
   });
+
+  it('shares one /refresh between a proactive refresh and an overlapping 401', async () => {
+    // A laptop wakes up: the overdue timer fires a refresh while a query
+    // 401s. Two refreshes with the same cookie would look like token reuse
+    // to the backend and revoke every session of the user.
+    tokenStore.set('old-access');
+    const { refreshAccessToken } = await import('@/api/refreshAccessToken');
+
+    let refreshCalls = 0;
+    refreshMock.onPost('/auth/v1/refresh').reply(async () => {
+      refreshCalls += 1;
+      await new Promise((r) => setTimeout(r, 20));
+      return [200, { tokens: { access_token: 'new-access', refresh_token: 'new-refresh' } }];
+    });
+    mock.onGet('/todos').replyOnce(401).onGet('/todos').reply(200, { ok: 1 });
+
+    const proactive = refreshAccessToken();
+    const reactive = axiosClient.get('/todos');
+    await Promise.all([proactive, reactive]);
+
+    expect(refreshCalls).toBe(1);
+  });
+
+  it('emits "refreshed" with the new token after a successful refresh', async () => {
+    tokenStore.set('old-access');
+    const onRefreshed = vi.fn();
+    const off = authEvents.on('refreshed', onRefreshed);
+
+    refreshMock.onPost('/auth/v1/refresh').reply(200, {
+      tokens: { access_token: 'new-access', refresh_token: 'new-refresh' },
+    });
+    mock.onGet('/me').replyOnce(401).onGet('/me').reply(200, {});
+
+    await axiosClient.get('/me');
+
+    expect(onRefreshed).toHaveBeenCalledTimes(1);
+    expect(onRefreshed).toHaveBeenCalledWith('new-access');
+    off();
+  });
+
+  it('does not refresh for a 401 that arrives after the session was torn down', async () => {
+    // The request left with a Bearer token; logout / identity change cleared
+    // the store while it was in flight. Refreshing now would resurrect the
+    // session (possibly with a hostile cookie).
+    tokenStore.set('old-access');
+    let refreshCalls = 0;
+    refreshMock.onPost('/auth/v1/refresh').reply(() => {
+      refreshCalls += 1;
+      return [200, { tokens: { access_token: 'other-access', refresh_token: 'x' } }];
+    });
+    mock.onGet('/slow').reply(() => {
+      tokenStore.clear();
+      return [401];
+    });
+
+    await expect(axiosClient.get('/slow')).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(refreshCalls).toBe(0);
+    expect(tokenStore.get()).toBeNull();
+  });
+
+  it('still refreshes a 401 on a request sent without Bearer (bootstrap probe)', async () => {
+    tokenStore.clear();
+    let refreshCalls = 0;
+    refreshMock.onPost('/auth/v1/refresh').reply(() => {
+      refreshCalls += 1;
+      return [200, { tokens: { access_token: 'cookie-access', refresh_token: 'x' } }];
+    });
+    mock.onGet('/me').replyOnce(401).onGet('/me').reply(200, { id: 'u-1' });
+
+    const res = await axiosClient.get('/me');
+
+    expect(res.status).toBe(200);
+    expect(refreshCalls).toBe(1);
+    expect(tokenStore.get()).toBe('cookie-access');
+  });
+
+  describe('refresh failures that are not a lost session', () => {
+    const cases: Array<[string, (a: MockAdapter) => void]> = [
+      ['a 500', (a) => a.onPost('/auth/v1/refresh').reply(500)],
+      ['a 502', (a) => a.onPost('/auth/v1/refresh').reply(502)],
+      ['a 429', (a) => a.onPost('/auth/v1/refresh').reply(429)],
+      ['a network error', (a) => a.onPost('/auth/v1/refresh').networkError()],
+    ];
+
+    it.each(cases)('keeps the session on %s and rethrows the original 401', async (_n, setup) => {
+      tokenStore.set('old-access');
+      const onUnauth = vi.fn();
+      const off = authEvents.on('unauthorized', onUnauth);
+      setup(refreshMock);
+      mock.onGet('/x').reply(401);
+
+      await expect(axiosClient.get('/x')).rejects.toMatchObject({
+        response: { status: 401 },
+        config: { url: '/x' },
+      });
+      expect(onUnauth).not.toHaveBeenCalled();
+      expect(tokenStore.get()).toBe('old-access');
+
+      off();
+    });
+
+    it.each([401, 403])('emits unauthorized when the refresh fails with %i', async (status) => {
+      tokenStore.set('old-access');
+      const onUnauth = vi.fn();
+      const off = authEvents.on('unauthorized', onUnauth);
+      refreshMock.onPost('/auth/v1/refresh').reply(status);
+      mock.onGet('/x').reply(401);
+
+      await expect(axiosClient.get('/x')).rejects.toThrow();
+      expect(onUnauth).toHaveBeenCalledTimes(1);
+
+      off();
+    });
+  });
 });

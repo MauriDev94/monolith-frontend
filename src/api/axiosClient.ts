@@ -1,7 +1,7 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { env } from '@/lib/env';
 import { tokenStore } from '@/api/tokenStore';
-import { refreshClient } from '@/api/refreshClient';
+import { refreshAccessToken, isAuthFailure } from '@/api/refreshAccessToken';
 import { authEvents } from '@/auth/authEvents';
 
 /**
@@ -15,27 +15,25 @@ import { authEvents } from '@/auth/authEvents';
  *  2. **Response** — single-flight 401 refresh:
  *     - On the first 401 for a request, mark it `_retried` and call
  *       `refreshAccessToken()`.
- *     - `inflightRefresh` (module-scoped) coalesces concurrent 401s so
- *       exactly one `POST /auth/v1/refresh` is dispatched even if many
- *       requests 401 simultaneously.
+ *     - Its module-scoped single-flight promise coalesces concurrent 401s
+ *       (and the proactive timer) so exactly one `POST /auth/v1/refresh` is
+ *       dispatched even if many callers need it simultaneously.
  *     - On refresh success, retry the original request with the new
  *       `access_token`. The retry's own outcome (success or error) is
  *       returned as is; a failed retry never ends the session.
- *     - On refresh failure, emit `authEvents.emit('unauthorized')` (handled
- *       by `AuthProvider`) and rethrow the original 401, so callers see the
- *       error of the request they made rather than the refresh's.
+ *     - On refresh failure, rethrow the original 401, so callers see the
+ *       error of the request they made rather than the refresh's. Only when
+ *       the refresh itself was rejected (401/403) also emit
+ *       `authEvents.emit('unauthorized')` (handled by `AuthProvider`); a
+ *       network error, 5xx or 429 keeps the session.
  *     - The `_retried` flag prevents an infinite loop if the retry itself
  *       401s.
  *     - Credential endpoints (login, register) are skipped: their 401 means
  *       "wrong credentials", not "expired access token", so there is
  *       nothing to refresh.
  *
- * Refresh uses the bare `refreshClient` (no interceptors) — otherwise the
- * refresh call could trigger a 401 cycle (locked decision #4).
- *
- * Refresh contract: the backend returns `{ tokens: { access_token, refresh_token } }`
- * (RefreshTokenResponse in the OpenAPI schema). The browser ignores the
- * new refresh cookie; only `access_token` is read here.
+ * `refreshAccessToken` uses the bare `refreshClient` (no interceptors) —
+ * otherwise the refresh call could trigger a 401 cycle (locked decision #4).
  */
 
 type RetriedConfig = InternalAxiosRequestConfig & { _retried?: boolean };
@@ -47,29 +45,6 @@ function isCredentialRequest(config: InternalAxiosRequestConfig): boolean {
   if (!config.url) return false;
   // `url` is relative in practice; the dummy base also handles an absolute one.
   return CREDENTIAL_PATHS.has(new URL(config.url, 'http://localhost').pathname);
-}
-
-let inflightRefresh: Promise<string> | null = null;
-
-async function refreshAccessToken(): Promise<string> {
-  if (inflightRefresh === null) {
-    inflightRefresh = (async () => {
-      try {
-        // No body: the refresh token travels in the HttpOnly cookie.
-        const { data } = await refreshClient.post<{
-          tokens: { access_token: string; refresh_token: string };
-        }>('/auth/v1/refresh');
-        const newAccess = data.tokens.access_token;
-        tokenStore.set(newAccess);
-        return newAccess;
-      } finally {
-        // ALWAYS null, even on rejection — otherwise a failed refresh
-        // would poison subsequent calls until the next page reload.
-        inflightRefresh = null;
-      }
-    })();
-  }
-  return inflightRefresh;
 }
 
 export const axiosClient: AxiosInstance = axios.create({
@@ -98,13 +73,25 @@ axiosClient.interceptors.response.use(undefined, async (error: AxiosError) => {
   ) {
     throw error;
   }
+  // A request that left with a Bearer token from a session that has since been
+  // torn down (logout, forced logout, identity change) must not start a new
+  // refresh: it could resurrect the session with a stale or hostile cookie.
+  // The bootstrap /me probe leaves without Authorization and still refreshes.
+  if (original.headers.has('Authorization') && tokenStore.get() === null) throw error;
   original._retried = true;
 
   let newAccess: string;
   try {
     newAccess = await refreshAccessToken();
-  } catch {
-    authEvents.emit('unauthorized');
+  } catch (refreshErr) {
+    // An IdentityChangedError needs nothing here: cleanup already ran and the
+    // request must not be retried with the other user's token. Otherwise, only
+    // a rejected refresh credential ends the session. A network error, a 5xx
+    // or a 429 leaves it intact: the caller gets its own 401 and the query
+    // shows an error state instead of the user being logged out.
+    if (isAuthFailure(refreshErr)) {
+      authEvents.emit('unauthorized');
+    }
     throw error;
   }
 
