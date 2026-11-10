@@ -64,7 +64,7 @@
           "v1 Auth"
         ],
         "summary": "Login User",
-        "description": "Authenticate credentials and return access/refresh tokens.",
+        "description": "Authenticate credentials, return the access token and set the refresh token as an HttpOnly cookie.",
         "operationId": "login_user_auth_v1_login_post",
         "requestBody": {
           "content": {
@@ -107,7 +107,7 @@
           "v1 Auth"
         ],
         "summary": "Refresh Access Token",
-        "description": "Issue a new access token from a valid refresh token.\n\nPrecedence: the `refresh_token` HttpOnly cookie wins; the body field is a legacy\nfallback for non-browser clients. The new refresh cookie is always set so the\nbrowser keeps an up-to-date cookie after every rotation.",
+        "description": "Issue a new access token from the refresh token cookie.\n\nThe `refresh_token` HttpOnly cookie is the only transport: any request body is\nignored (the endpoint declares none), so a token can never be replayed from a\nbody nor read back from a response. The new refresh cookie is always set so the\nbrowser keeps an up-to-date cookie after every rotation.",
         "operationId": "refresh_access_token_auth_v1_refresh_post",
         "parameters": [
           {
@@ -127,23 +127,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/RefreshTokenRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Request"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -442,7 +425,7 @@
           "v1 Auth"
         ],
         "summary": "Logout User",
-        "description": "End the session: revoke every refresh token and clear the cookie.\n\nIdempotent: missing, empty, tampered, or sub-less cookies still return 204 —\nno information leak about whether a valid session existed. CSRF is bounded:\nsee docs/ARCHITECTURE.md §8.1.",
+        "description": "End the session: revoke every refresh token and clear the cookie.\n\nIdempotent: missing, empty, tampered, or sub-less cookies still return 204 —\nno information leak about whether a valid session existed. CSRF is blocked\napp-wide by `OriginCheckMiddleware` (Origin / Sec-Fetch-Site check on unsafe\nmethods), which rejects cross-site requests before this handler runs; see\ndocs/ARCHITECTURE.md §8.1 (decision 13).",
         "operationId": "logout_user_auth_v1_logout_post",
         "parameters": [
           {
@@ -1295,17 +1278,12 @@
           "token_type": {
             "type": "string",
             "title": "Token Type"
-          },
-          "refresh_token": {
-            "type": "string",
-            "title": "Refresh Token"
           }
         },
         "type": "object",
         "required": [
           "access_token",
-          "token_type",
-          "refresh_token"
+          "token_type"
         ],
         "title": "LoginResponse",
         "description": "Response schema for login endpoint."
@@ -1323,25 +1301,6 @@
         ],
         "title": "OtpResponse",
         "description": "Response schema for OTP endpoints."
-      },
-      "RefreshTokenRequest": {
-        "properties": {
-          "refresh_token": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Refresh Token"
-          }
-        },
-        "type": "object",
-        "title": "RefreshTokenRequest",
-        "description": "Request schema used to refresh an access token.\n\nThe refresh token is optional in the body because the frontend sends it via the\n`refresh_token` HttpOnly cookie instead. Non-browser clients (mobile, CLI) can\nstill send it in the body; when both are present, the cookie wins."
       },
       "RefreshTokenResponse": {
         "properties": {
@@ -1497,10 +1456,6 @@
             "type": "string",
             "title": "Access Token"
           },
-          "refresh_token": {
-            "type": "string",
-            "title": "Refresh Token"
-          },
           "token_type": {
             "type": "string",
             "title": "Token Type"
@@ -1509,11 +1464,10 @@
         "type": "object",
         "required": [
           "access_token",
-          "refresh_token",
           "token_type"
         ],
         "title": "TokenPairResponse",
-        "description": "Access/refresh token pair exposed in API responses."
+        "description": "Access token exposed in API responses (the refresh token travels only in the cookie)."
       },
       "UpdateTodoRequest": {
         "properties": {

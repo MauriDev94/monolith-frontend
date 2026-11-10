@@ -69,7 +69,8 @@ Notes:
 - `refresh_token` is an HttpOnly cookie set by the backend with `SameSite=None; Secure` in production (mandatory for Vercel ↔ Render cross-site; browsers that block third-party cookies drop it, see [ADR 0002](docs/adr/0002-cross-site-refresh-cookie.md)). This describes today's behavior: [ADR 0004](docs/adr/0004-same-origin-api-proxy.md) supersedes ADR 0002 and plans a same-origin proxy with a `SameSite=Lax` cookie, **not implemented yet**.
 - In dev the backend sends `SameSite=Lax` without `Secure` ([Api_monolith#127](https://github.com/MauriDev94/Api_monolith/pull/127)). Chromium browsers reject `SameSite=None` cookies that are not `Secure`, and `Lax` is enough because dev requests are same-origin through the Vite proxy.
 - The frontend NEVER reads `refresh_token` from `document.cookie`. The cookie is purely a transport for `/auth/v1/refresh`.
-- `LoginResponse.refresh_token` (in the JSON body) is also never read by the frontend — it exists for non-browser clients (mobile/CLI). The access token in the body is the only credential the SPA extracts.
+- The JSON bodies of `/auth/v1/login` and `/auth/v1/refresh` carry only the access token, with `Cache-Control: no-store`. The refresh token travels only in the cookie ([Api_monolith#130](https://github.com/MauriDev94/Api_monolith/pull/130)).
+- The backend rejects unsafe requests from an `Origin` outside `CORS_ALLOWED_ORIGINS` unless `Sec-Fetch-Site` is `same-origin` ([Api_monolith#129](https://github.com/MauriDev94/Api_monolith/pull/129)). That blocks login CSRF and forced logouts from other sites; the Vite proxy passes because the browser sees a same-origin request.
 
 ## Related
 

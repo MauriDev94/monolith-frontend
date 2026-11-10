@@ -12,9 +12,9 @@ import { authEvents } from '@/auth/authEvents';
  * request. Two refreshes with the same cookie would look like token reuse to
  * the backend, which revokes every session of the user.
  *
- * Refresh contract: the backend returns `{ tokens: { access_token, refresh_token } }`
- * (`RefreshTokenResponse` in the generated schema). The browser ignores the new
- * refresh cookie; only `access_token` is read.
+ * Refresh contract: the backend returns `{ tokens: { access_token, token_type } }`
+ * (`RefreshTokenResponse` in the generated schema) and rotates the refresh token
+ * in the HttpOnly cookie, its only transport since Api_monolith#130.
  */
 
 /**

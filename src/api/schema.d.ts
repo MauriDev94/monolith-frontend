@@ -35,7 +35,7 @@ export interface paths {
     put?: never;
     /**
      * Login User
-     * @description Authenticate credentials and return access/refresh tokens.
+     * @description Authenticate credentials, return the access token and set the refresh token as an HttpOnly cookie.
      */
     post: operations['login_user_auth_v1_login_post'];
     delete?: never;
@@ -55,10 +55,11 @@ export interface paths {
     put?: never;
     /**
      * Refresh Access Token
-     * @description Issue a new access token from a valid refresh token.
+     * @description Issue a new access token from the refresh token cookie.
      *
-     *     Precedence: the `refresh_token` HttpOnly cookie wins; the body field is a legacy
-     *     fallback for non-browser clients. The new refresh cookie is always set so the
+     *     The `refresh_token` HttpOnly cookie is the only transport: any request body is
+     *     ignored (the endpoint declares none), so a token can never be replayed from a
+     *     body nor read back from a response. The new refresh cookie is always set so the
      *     browser keeps an up-to-date cookie after every rotation.
      */
     post: operations['refresh_access_token_auth_v1_refresh_post'];
@@ -202,8 +203,10 @@ export interface paths {
      * @description End the session: revoke every refresh token and clear the cookie.
      *
      *     Idempotent: missing, empty, tampered, or sub-less cookies still return 204 —
-     *     no information leak about whether a valid session existed. CSRF is bounded:
-     *     see docs/ARCHITECTURE.md §8.1.
+     *     no information leak about whether a valid session existed. CSRF is blocked
+     *     app-wide by `OriginCheckMiddleware` (Origin / Sec-Fetch-Site check on unsafe
+     *     methods), which rejects cross-site requests before this handler runs; see
+     *     docs/ARCHITECTURE.md §8.1 (decision 13).
      */
     post: operations['logout_user_auth_v1_logout_post'];
     delete?: never;
@@ -490,8 +493,6 @@ export interface components {
       access_token: string;
       /** Token Type */
       token_type: string;
-      /** Refresh Token */
-      refresh_token: string;
     };
     /**
      * OtpResponse
@@ -500,18 +501,6 @@ export interface components {
     OtpResponse: {
       /** Message */
       message: string;
-    };
-    /**
-     * RefreshTokenRequest
-     * @description Request schema used to refresh an access token.
-     *
-     *     The refresh token is optional in the body because the frontend sends it via the
-     *     `refresh_token` HttpOnly cookie instead. Non-browser clients (mobile, CLI) can
-     *     still send it in the body; when both are present, the cookie wins.
-     */
-    RefreshTokenRequest: {
-      /** Refresh Token */
-      refresh_token?: string | null;
     };
     /**
      * RefreshTokenResponse
@@ -573,13 +562,11 @@ export interface components {
     };
     /**
      * TokenPairResponse
-     * @description Access/refresh token pair exposed in API responses.
+     * @description Access token exposed in API responses (the refresh token travels only in the cookie).
      */
     TokenPairResponse: {
       /** Access Token */
       access_token: string;
-      /** Refresh Token */
-      refresh_token: string;
       /** Token Type */
       token_type: string;
     };
@@ -748,11 +735,7 @@ export interface operations {
         refresh_token?: string | null;
       };
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['RefreshTokenRequest'] | null;
-      };
-    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {

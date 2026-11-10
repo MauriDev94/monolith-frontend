@@ -44,15 +44,15 @@ export function userFixture(overrides: Partial<Schemas['AuthUserResponse']> = {}
   } satisfies Schemas['AuthUserResponse'];
 }
 
-export function tokenPairFixture(access: string, refresh = 'refresh-token') {
+/** Login token response. Only the access token: the refresh token travels in the cookie. */
+export function tokenPairFixture(access: string) {
   return {
     access_token: access,
-    refresh_token: refresh,
     token_type: 'bearer',
   } satisfies Schemas['TokenPairResponse'];
 }
 
 /** Body of `POST /auth/v1/refresh`. */
-export function refreshBody(access: string, refresh = 'unused') {
-  return { tokens: tokenPairFixture(access, refresh) } satisfies Schemas['RefreshTokenResponse'];
+export function refreshBody(access: string) {
+  return { tokens: tokenPairFixture(access) } satisfies Schemas['RefreshTokenResponse'];
 }
