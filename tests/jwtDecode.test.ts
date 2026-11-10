@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeJwtExp } from '@/auth/jwtDecode';
+import { decodeJwtExp, decodeJwtSub } from '@/auth/jwtDecode';
 
 /**
  * Build a JWT string from arbitrary claims. Encodes `header` and `payload`
@@ -64,7 +64,7 @@ describe('decodeJwtExp', () => {
 
   it('throws when the payload is not an object', () => {
     const token = makeJwt('a string' as unknown as Record<string, unknown>);
-    expect(() => decodeJwtExp(token)).toThrow(/missing the exp claim/);
+    expect(() => decodeJwtExp(token)).toThrow(/not an object/);
   });
 
   it('throws when exp is not a finite number', () => {
@@ -73,5 +73,21 @@ describe('decodeJwtExp', () => {
 
     const infToken = makeJwt({ exp: Infinity as unknown as number });
     expect(() => decodeJwtExp(infToken)).toThrow(/finite number/);
+  });
+});
+
+describe('decodeJwtSub', () => {
+  it('returns the sub claim', () => {
+    expect(decodeJwtSub(makeJwt({ sub: 'user-1', exp: 1_700_000_000 }))).toBe('user-1');
+  });
+
+  it('throws when sub is missing or not a non-empty string', () => {
+    expect(() => decodeJwtSub(makeJwt({ exp: 1 }))).toThrow(/sub/);
+    expect(() => decodeJwtSub(makeJwt({ sub: 42, exp: 1 }))).toThrow(/sub/);
+    expect(() => decodeJwtSub(makeJwt({ sub: '', exp: 1 }))).toThrow(/sub/);
+  });
+
+  it('throws on a malformed token', () => {
+    expect(() => decodeJwtSub('not-a-jwt')).toThrow(/3 segments/);
   });
 });

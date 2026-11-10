@@ -34,7 +34,7 @@ const navigateMock = vi.fn();
 const scheduleMock = vi.fn();
 const cancelMock = vi.fn();
 const toastErrorMock = vi.fn();
-const authListeners = new Set<() => void>();
+const authListeners = new Map<string, Set<(payload?: unknown) => void>>();
 
 vi.mock('@/api/authApi', () => ({
   login: (...args: unknown[]) => apiLoginMock(...args),
@@ -66,17 +66,17 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/auth/authEvents', () => ({
   authEvents: {
-    on: (event: string, cb: () => void) => {
-      if (event === 'unauthorized') authListeners.add(cb);
+    on: (event: string, cb: (payload?: unknown) => void) => {
+      if (!authListeners.has(event)) authListeners.set(event, new Set());
+      authListeners.get(event)?.add(cb);
       return () => {
-        authListeners.delete(cb);
+        authListeners.get(event)?.delete(cb);
       };
     },
-    emit: (event: string) => {
-      if (event !== 'unauthorized') return;
-      for (const cb of [...authListeners]) {
+    emit: (event: string, payload?: unknown) => {
+      for (const cb of [...(authListeners.get(event) ?? [])]) {
         try {
-          cb();
+          cb(payload);
         } catch {
           // swallow — mirrors real authEvents behavior
         }
@@ -99,6 +99,8 @@ import { AuthProvider } from '@/auth/AuthProvider';
 import { useAuth } from '@/auth/useAuth';
 import { authEvents } from '@/auth/authEvents';
 import { tokenStore } from '@/api/tokenStore';
+import { axiosClient } from '@/api/axiosClient';
+import MockAdapter from 'axios-mock-adapter';
 import type { MeResponse } from '@/api/authApi';
 import type { AuthContextValue } from '@/auth/AuthContext';
 import { TEST_PASSWORD_LOGIN_OK, TEST_PASSWORD_REGISTER_OK } from './test-fixtures';
@@ -534,6 +536,295 @@ describe('AuthProvider — authEvents unauthorized listener', () => {
 
     expect(getCaptured(captured).status).toBe('unauthenticated');
     expect(navigateMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Fake access token built at runtime: base64url header + payload and a
+ * dummy signature. Only `sub` and `exp` matter to the code under test.
+ */
+function makeJwt(sub: string): string {
+  const b64 = (obj: object) =>
+    btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const exp = Math.floor(Date.now() / 1000) + 900;
+  return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, exp })}.sig`;
+}
+
+function refreshReply(access: string) {
+  return { data: { tokens: { access_token: access, refresh_token: 'unused' } } };
+}
+
+function httpError(status: number): AxiosError {
+  return new AxiosError('failed', String(status), undefined, undefined, {
+    status,
+    data: {},
+  } as never);
+}
+
+/** Render the provider in an authenticated state and return the scheduled callback. */
+async function renderAuthenticated() {
+  apiMeMock.mockResolvedValue(USER);
+  tokenStore.set(makeJwt(USER.id));
+  const captured = { current: null as AuthContextValue | null };
+  render(
+    <AuthProvider>
+      <CaptureAuth onValue={(v) => (captured.current = v)} />
+    </AuthProvider>,
+  );
+  await waitFor(() => {
+    expect(getCaptured(captured).status).toBe('authenticated');
+  });
+  const onRefresh = scheduleMock.mock.calls[0][1] as () => Promise<void>;
+  scheduleMock.mockClear();
+  cancelMock.mockClear();
+  navigateMock.mockClear();
+  return { captured, onRefresh };
+}
+
+describe('AuthProvider — single refresh path', () => {
+  it('sends one /refresh when the proactive timer and a 401 overlap', async () => {
+    const { onRefresh } = await renderAuthenticated();
+    refreshPostMock.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      return refreshReply(makeJwt(USER.id));
+    });
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/todos').replyOnce(401).onGet('/todos').reply(200, { ok: 1 });
+
+    await act(async () => {
+      await Promise.all([onRefresh(), axiosClient.get('/todos')]);
+    });
+
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
+    http.restore();
+  });
+
+  it('reschedules the timer after a reactive (interceptor) refresh', async () => {
+    await renderAuthenticated();
+    const fresh = makeJwt(USER.id);
+    refreshPostMock.mockResolvedValue(refreshReply(fresh));
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/todos').replyOnce(401).onGet('/todos').reply(200, { ok: 1 });
+
+    await act(async () => {
+      await axiosClient.get('/todos');
+    });
+
+    expect(scheduleMock).toHaveBeenCalledWith(fresh, expect.any(Function), 30_000);
+    http.restore();
+  });
+});
+
+describe('AuthProvider — identity switch after a refresh', () => {
+  it('tears the session down when the refreshed token belongs to another user', async () => {
+    const { captured, onRefresh } = await renderAuthenticated();
+    refreshPostMock.mockResolvedValue(refreshReply(makeJwt('u-other')));
+
+    await act(async () => {
+      await onRefresh();
+    });
+
+    expect(tokenStore.get()).toBeNull();
+    expect(cancelMock).toHaveBeenCalled();
+    expect(getCaptured(captured).user).toBeNull();
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+    expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
+    expect(toastErrorMock).toHaveBeenCalledWith('Tu sesión cambió. Vuelve a ingresar.');
+    expect(scheduleMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session when the refreshed token is for the same user', async () => {
+    const { captured, onRefresh } = await renderAuthenticated();
+    const fresh = makeJwt(USER.id);
+    refreshPostMock.mockResolvedValue(refreshReply(fresh));
+
+    await act(async () => {
+      await onRefresh();
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(scheduleMock).toHaveBeenCalledWith(fresh, expect.any(Function), 30_000);
+  });
+
+  it('does not compare identities when there is no current user (bootstrap probe)', async () => {
+    // The mount /me 401s, the interceptor refreshes, and only then does the
+    // user load: a refreshed token with no user yet is not a switch.
+    apiMeMock.mockReturnValue(new Promise(() => {}));
+    render(
+      <AuthProvider>
+        <CaptureAuth onValue={() => undefined} />
+      </AuthProvider>,
+    );
+
+    act(() => {
+      authEvents.emit('refreshed', makeJwt('u-other'));
+    });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthProvider — identity switch must not leak the retry', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not retry the original request with the other user token', async () => {
+    // The cookie was swapped: A's write 401s, the refresh returns B's token.
+    // Retrying would write A's data into B's account.
+    const { captured } = await renderAuthenticated();
+    refreshPostMock.mockResolvedValue(refreshReply(makeJwt('u-other')));
+    const http = new MockAdapter(axiosClient);
+    http.onPost('/v1/todos').replyOnce(401).onPost('/v1/todos').reply(201, { todo: {} });
+
+    await act(async () => {
+      await expect(axiosClient.post('/v1/todos', { title: 'x' })).rejects.toMatchObject({
+        response: { status: 401 },
+      });
+    });
+
+    expect(http.history.post).toHaveLength(1);
+    expect(tokenStore.get()).toBeNull();
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+    http.restore();
+  });
+
+  it('does not arm the retry timer after a proactive refresh tore the session down', async () => {
+    const { onRefresh } = await renderAuthenticated();
+    vi.useFakeTimers();
+    refreshPostMock.mockResolvedValue(refreshReply(makeJwt('u-other')));
+
+    await act(async () => {
+      await onRefresh();
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('AuthProvider — refresh bookkeeping', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('cancels a pending proactive retry when another refresh succeeds', async () => {
+    const { onRefresh } = await renderAuthenticated();
+    vi.useFakeTimers();
+    refreshPostMock.mockRejectedValue(new AxiosError('Network Error'));
+    await act(async () => {
+      await onRefresh();
+    });
+
+    act(() => {
+      authEvents.emit('refreshed', makeJwt(USER.id));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigates once when "unauthorized" is emitted twice in the same tick', async () => {
+    await renderAuthenticated();
+
+    act(() => {
+      authEvents.emit('unauthorized');
+      authEvents.emit('unauthorized');
+    });
+
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not rearm the timer for a refresh that lands right after a teardown', async () => {
+    await renderAuthenticated();
+
+    act(() => {
+      authEvents.emit('unauthorized');
+      authEvents.emit('refreshed', makeJwt(USER.id));
+    });
+
+    expect(scheduleMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthProvider — proactive refresh failures', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps the session and retries once after a delay on a non-auth failure', async () => {
+    const { captured, onRefresh } = await renderAuthenticated();
+    vi.useFakeTimers();
+    const fresh = makeJwt(USER.id);
+    refreshPostMock
+      .mockRejectedValueOnce(httpError(502))
+      .mockResolvedValueOnce(refreshReply(fresh));
+
+    await act(async () => {
+      await onRefresh();
+    });
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(refreshPostMock).toHaveBeenCalledTimes(2);
+    expect(scheduleMock).toHaveBeenCalledWith(fresh, expect.any(Function), 30_000);
+    expect(getCaptured(captured).status).toBe('authenticated');
+  });
+
+  it('retries only once, and a network error never ends the session', async () => {
+    const { captured, onRefresh } = await renderAuthenticated();
+    vi.useFakeTimers();
+    refreshPostMock.mockRejectedValue(new AxiosError('Network Error'));
+
+    await act(async () => {
+      await onRefresh();
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(refreshPostMock).toHaveBeenCalledTimes(2);
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403])('logs out immediately when the refresh fails with %i', async (code) => {
+    const { captured, onRefresh } = await renderAuthenticated();
+    refreshPostMock.mockRejectedValue(httpError(code));
+
+    await act(async () => {
+      await onRefresh();
+    });
+
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+    expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a pending retry when the session is torn down', async () => {
+    const { onRefresh, captured } = await renderAuthenticated();
+    vi.useFakeTimers();
+    refreshPostMock.mockRejectedValue(new AxiosError('Network Error'));
+
+    await act(async () => {
+      await onRefresh();
+    });
+    await act(async () => {
+      await getCaptured(captured).logout();
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
   });
 });
 

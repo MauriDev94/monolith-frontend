@@ -24,46 +24,63 @@
  * @throws Error when the token cannot be decoded or `exp` is missing.
  */
 export function decodeJwtExp(token: string): number {
+  const payload = decodeJwtPayload(token);
+  if (!('exp' in payload)) {
+    throw new Error('decodeJwtExp: payload is missing the exp claim');
+  }
+
+  const exp = payload.exp;
+  if (typeof exp !== 'number' || !Number.isFinite(exp)) {
+    throw new Error('decodeJwtExp: exp claim is not a finite number');
+  }
+
+  return exp;
+}
+
+/**
+ * Decode the `sub` claim (the user id) from a JWT. The backend sets it to the
+ * user's id (`create_access_token(subject=user.id)`), the same value as `id`
+ * in `/auth/v1/me`, so the SPA can notice that a refresh returned a token for
+ * a different user than the one on screen.
+ *
+ * @throws Error when the token cannot be decoded or `sub` is not a non-empty string.
+ */
+export function decodeJwtSub(token: string): string {
+  const { sub } = decodeJwtPayload(token);
+  if (typeof sub !== 'string' || sub.length === 0) {
+    throw new Error('decodeJwtSub: sub claim is missing or not a non-empty string');
+  }
+  return sub;
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
   if (typeof token !== 'string' || token.length === 0) {
-    throw new Error('decodeJwtExp: token must be a non-empty string');
+    throw new Error('decodeJwt: token must be a non-empty string');
   }
 
   const segments = token.split('.');
   if (segments.length !== 3) {
-    throw new Error(
-      `decodeJwtExp: expected 3 segments, got ${segments.length}`,
-    );
+    throw new Error(`decodeJwt: expected 3 segments, got ${segments.length}`);
   }
 
-  const payloadSegment = segments[1];
   let payloadJson: string;
   try {
-    payloadJson = base64UrlDecode(payloadSegment);
+    payloadJson = base64UrlDecode(segments[1]);
   } catch (cause) {
-    throw new Error('decodeJwtExp: payload is not valid base64url', { cause });
+    throw new Error('decodeJwt: payload is not valid base64url', { cause });
   }
 
   let payload: unknown;
   try {
     payload = JSON.parse(payloadJson);
   } catch (cause) {
-    throw new Error('decodeJwtExp: payload is not valid JSON', { cause });
+    throw new Error('decodeJwt: payload is not valid JSON', { cause });
   }
 
-  if (
-    payload === null ||
-    typeof payload !== 'object' ||
-    !('exp' in payload)
-  ) {
-    throw new Error('decodeJwtExp: payload is missing the exp claim');
+  if (payload === null || typeof payload !== 'object') {
+    throw new Error('decodeJwt: JWT payload is not an object');
   }
-
-  const exp = (payload as { exp: unknown }).exp;
-  if (typeof exp !== 'number' || !Number.isFinite(exp)) {
-    throw new Error('decodeJwtExp: exp claim is not a finite number');
-  }
-
-  return exp;
+  return payload as Record<string, unknown>;
 }
 
 /**

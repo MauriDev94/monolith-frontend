@@ -143,3 +143,36 @@ describe('createRefreshScheduler', () => {
     expect(clock.getTimerCount()).toBe(0);
   });
 });
+describe('createRefreshScheduler — minimum delay', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('never fires sooner than minDelayMs, even for an overdue token', () => {
+    const scheduler = createRefreshScheduler();
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+
+    scheduler.schedule(makeToken(-30), onRefresh, 30_000);
+
+    vi.advanceTimersByTime(29_999);
+    expect(onRefresh).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the computed delay when it is above the minimum', () => {
+    const scheduler = createRefreshScheduler();
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+
+    scheduler.schedule(makeToken(900), onRefresh, 30_000);
+
+    vi.advanceTimersByTime(13 * 60 * 1000);
+    expect(onRefresh).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(60 * 1000);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
