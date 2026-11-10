@@ -13,9 +13,11 @@ corepack pnpm test         # vitest run
 corepack pnpm typecheck    # tsc --noEmit
 corepack pnpm lint         # eslint, --max-warnings 0
 corepack pnpm build        # tsc --noEmit && vite build
+corepack pnpm api:pull     # download the production OpenAPI schema into openapi/openapi.json
+corepack pnpm gen:api      # regenerate src/api/schema.d.ts from the snapshot
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, test and build on every PR. Run all four before opening one.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, test and build on every PR, plus a check that `schema.d.ts` matches the snapshot. Run all four before opening one.
 
 `.env.local` is created from `.env.example`. Never read or print `.env*` files other than `.env.example`.
 
@@ -33,7 +35,7 @@ Docker Desktop's WSL VM is capped at 4 GB (`~/.wslconfig`). The machine has 16 G
 
 ```
 src/
-  api/          axios clients, typed endpoint wrappers (authApi, todosApi), token store,
+  api/          axios clients, typed endpoint wrappers (authApi, todosApi), generated schema.d.ts, token store,
                 query client, apiErrors (Spanish copy for failed calls)
   auth/         AuthProvider, RequireAuth, forms, Zod schemas, refresh scheduler, events
   todos/        quest log: CreateTodoForm, TodoCard, Zod schema, TanStack Query hooks
@@ -70,7 +72,8 @@ tests/          Vitest specs, one file per unit; setup.ts, test-fixtures.ts
 - Never show `err.message` to users (axios messages are English). Use `apiErrorMessage(err, fallback)` from `api/apiErrors.ts`; handle endpoint-specific statuses first (see `auth/authErrors.ts`).
 - Todos: `GET /v1/todos?limit&offset` returns `{ todos, total, limit, offset }`, oldest first (`limit` 1–100). `POST /v1/todos` takes `{ title, description?, due_date? }` and returns `{ todo }`. Datetimes are ISO strings with a UTC offset.
 - `PUT /v1/todos/{id}` is a full replace: send `title`, `description`, `is_completed` and `due_date`, or the missing ones are cleared. Resend `due_date` as the exact string the API returned; the backend rejects past dates unless they equal the stored one, so a `Date` round-trip can break updates on overdue quests (ADR 0003).
-- Response types are hand-written in `api/authApi.ts` and `api/todosApi.ts` (openapi-typescript codegen is planned, not wired). When adding or changing a type, check it against the backend's `/openapi.json` or its Pydantic schemas. The mocked tests will not catch a wrong shape.
+- API types are generated, not hand-written. `src/api/schema.d.ts` comes from the committed snapshot `openapi/openapi.json` (`corepack pnpm gen:api`); `authApi.ts`, `todosApi.ts` and `refreshAccessToken.ts` alias `components['schemas'][…]`. When the backend changes: `corepack pnpm api:pull`, `corepack pnpm gen:api`, fix the type errors, and commit the snapshot and `schema.d.ts` together. Never edit `schema.d.ts` by hand (CI regenerates it and fails on a diff). Test fixtures use `userFixture`, `tokenPairFixture` and `refreshBody` from `tests/test-fixtures.ts`, typed with the schema, so a drifted fixture fails typecheck.
+- The backend's real validation errors are 400 with `{ message, errors }`, but the OpenAPI document still advertises FastAPI's default 422 `HTTPValidationError`. Do not trust the generated error types; errors go through `apiErrorMessage`.
 
 ## Testing
 

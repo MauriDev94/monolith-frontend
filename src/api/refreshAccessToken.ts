@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import type { components } from '@/api/schema';
 import { tokenStore } from '@/api/tokenStore';
 import { refreshClient } from '@/api/refreshClient';
 import { authEvents } from '@/auth/authEvents';
@@ -12,12 +13,9 @@ import { authEvents } from '@/auth/authEvents';
  * the backend, which revokes every session of the user.
  *
  * Refresh contract: the backend returns `{ tokens: { access_token, refresh_token } }`
- * (RefreshTokenResponse in the OpenAPI schema). The browser ignores the new
+ * (`RefreshTokenResponse` in the generated schema). The browser ignores the new
  * refresh cookie; only `access_token` is read.
  */
-interface RefreshResponse {
-  tokens: { access_token: string; refresh_token: string };
-}
 
 /**
  * Thrown when the refreshed token was discarded because the session was torn
@@ -31,6 +29,8 @@ export class IdentityChangedError extends Error {
   }
 }
 
+type RefreshTokenResponse = components['schemas']['RefreshTokenResponse'];
+
 let inflightRefresh: Promise<string> | null = null;
 
 export async function refreshAccessToken(): Promise<string> {
@@ -38,7 +38,7 @@ export async function refreshAccessToken(): Promise<string> {
     inflightRefresh = (async () => {
       try {
         // No body: the refresh token travels in the HttpOnly cookie.
-        const { data } = await refreshClient.post<RefreshResponse>('/auth/v1/refresh');
+        const { data } = await refreshClient.post<RefreshTokenResponse>('/auth/v1/refresh');
         const newAccess = data.tokens.access_token;
         tokenStore.set(newAccess);
         // Single place that announces a new token, so the provider
