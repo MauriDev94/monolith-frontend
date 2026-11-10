@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { Todo } from '@/api/todosApi';
+import type { Todo, TodosPage as TodosPageData } from '@/api/todosApi';
 
 /**
  * Tests for the `/todos` page (list + create).
@@ -46,7 +46,7 @@ function todo(n: number, overrides: Partial<Todo> = {}): Todo {
   };
 }
 
-function page(todos: Todo[], total: number, offset = 0) {
+function page(todos: Todo[], total: number, offset = 0): TodosPageData {
   return { todos, total, limit: 20, offset };
 }
 

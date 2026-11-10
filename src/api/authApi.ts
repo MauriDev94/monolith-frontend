@@ -1,4 +1,5 @@
 import { axiosClient } from '@/api/axiosClient';
+import type { components } from '@/api/schema';
 import type { LoginValues, RegisterValues } from '@/auth/schemas';
 
 /**
@@ -11,9 +12,8 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  *  - Request shapes (form-encoded vs JSON) live next to the URL, so the
  *    Content-Type / serialization mismatch on login (form) vs register (JSON)
  *    is impossible to forget.
- *  - Response types are co-located. Today these are hand-rolled; the
- *    planned openapi-typescript codegen (locked decision #2) will replace the
- *    hand types with `paths['/auth/v1/login']['post']['responses']['200']` etc.
+ *  - Response types are co-located and aliased from the generated schema
+ *    (`schema.d.ts`, locked decision #2).
  *
  * `axiosClient` carries the request interceptor that attaches
  * `Authorization: Bearer <access_token>` and the response interceptor that
@@ -25,33 +25,17 @@ import type { LoginValues, RegisterValues } from '@/auth/schemas';
  * JSON because the backend accepts a `UserCreateRequest` JSON body.
  */
 
-/**
- * The authenticated user (backend `AuthUserResponse`). Hand-rolled until PR4
- * codegen lands. `birthdate` is null for users created through Google SSO.
- */
-export interface MeResponse {
-  id: string;
-  email: string;
-  name: string;
-  lastname: string;
-  birthdate: string | null;
-}
+type Schemas = components['schemas'];
 
 /**
- * Wire shape of `GET /auth/v1/me` and `POST /auth/v1/register`: the backend
- * wraps the user in a `user` envelope. The wrappers unwrap it so callers get
- * a plain `MeResponse`.
+ * The authenticated user (backend `AuthUserResponse`). `birthdate` is null for
+ * users created through Google SSO. Types come from the generated
+ * `schema.d.ts` (locked decision #2); never hand-write them here.
  */
-interface UserEnvelope {
-  user: MeResponse;
-}
+export type MeResponse = Schemas['AuthUserResponse'];
 
 /** Shape of `POST /auth/v1/login` response. */
-export interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-}
+export type LoginResponse = Schemas['LoginResponse'];
 
 /**
  * `POST /auth/v1/login` (form-encoded).
@@ -79,13 +63,14 @@ export async function login(values: LoginValues): Promise<LoginResponse> {
  * `AuthProvider.register()`.
  */
 export async function register(values: RegisterValues): Promise<MeResponse> {
-  const { data } = await axiosClient.post<UserEnvelope>('/auth/v1/register', {
+  const body: Schemas['RegisterRequest'] = {
     name: values.name,
     lastname: values.lastname,
     email: values.email,
     password: values.password,
     birthdate: values.birthdate,
-  });
+  };
+  const { data } = await axiosClient.post<Schemas['RegisterResponse']>('/auth/v1/register', body);
   return data.user;
 }
 
@@ -113,6 +98,6 @@ export async function logout(): Promise<void> {
  * `authEvents.emit('unauthorized')` so the provider can clear state.
  */
 export async function me(): Promise<MeResponse> {
-  const { data } = await axiosClient.get<UserEnvelope>('/auth/v1/me');
+  const { data } = await axiosClient.get<Schemas['CurrentUserResponse']>('/auth/v1/me');
   return data.user;
 }

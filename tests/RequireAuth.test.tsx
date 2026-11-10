@@ -1,18 +1,6 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-} from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 /**
  * Tests for `RequireAuth`.
@@ -34,14 +22,9 @@ import { useAuth } from '@/auth/useAuth';
 import { RequireAuth } from '@/auth/RequireAuth';
 import type { AuthContextValue } from '@/auth/AuthContext';
 import type { MeResponse } from '@/api/authApi';
+import { userFixture } from './test-fixtures';
 
-const USER: MeResponse = {
-  id: 'u-1',
-  email: 'jane@example.com',
-  name: 'Jane',
-  lastname: 'Doe',
-  birthdate: '1990-05-12',
-};
+const USER: MeResponse = userFixture();
 
 const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
 
@@ -77,9 +60,7 @@ function LoginPage() {
   return (
     <>
       <div data-testid="login">login page</div>
-      <div data-testid="location">
-        {`${location.pathname}${location.search}`}
-      </div>
+      <div data-testid="location">{`${location.pathname}${location.search}`}</div>
     </>
   );
 }
@@ -128,9 +109,7 @@ describe('RequireAuth — loading state', () => {
 
 describe('RequireAuth — unauthenticated state', () => {
   it('redirects to /login?from=/todos when status is unauthenticated', () => {
-    mockUseAuth.mockReturnValue(
-      makeContext({ status: 'unauthenticated', user: null }),
-    );
+    mockUseAuth.mockReturnValue(makeContext({ status: 'unauthenticated', user: null }));
 
     render(
       <MemoryRouter initialEntries={['/todos']}>
@@ -147,15 +126,11 @@ describe('RequireAuth — unauthenticated state', () => {
     // redirected URL.
     expect(screen.queryByTestId('protected')).not.toBeInTheDocument();
     expect(screen.getByTestId('login')).toBeInTheDocument();
-    expect(screen.getByTestId('location').textContent).toBe(
-      '/login?from=/todos',
-    );
+    expect(screen.getByTestId('location').textContent).toBe('/login?from=/todos');
   });
 
   it('preserves the original path in the `from` query when nested', () => {
-    mockUseAuth.mockReturnValue(
-      makeContext({ status: 'unauthenticated', user: null }),
-    );
+    mockUseAuth.mockReturnValue(makeContext({ status: 'unauthenticated', user: null }));
 
     render(
       <MemoryRouter initialEntries={['/todos/123']}>
@@ -169,17 +144,13 @@ describe('RequireAuth — unauthenticated state', () => {
     );
 
     expect(screen.getByTestId('login')).toBeInTheDocument();
-    expect(screen.getByTestId('location').textContent).toBe(
-      '/login?from=/todos/123',
-    );
+    expect(screen.getByTestId('location').textContent).toBe('/login?from=/todos/123');
   });
 });
 
 describe('RequireAuth — authenticated state', () => {
   it('renders the Outlet (protected child) when status is authenticated', () => {
-    mockUseAuth.mockReturnValue(
-      makeContext({ status: 'authenticated', user: USER }),
-    );
+    mockUseAuth.mockReturnValue(makeContext({ status: 'authenticated', user: USER }));
 
     render(
       <MemoryRouter initialEntries={['/todos']}>
@@ -209,9 +180,7 @@ describe('RequireAuth — replace semantics', () => {
     // would still match; this test pins down the user-facing contract
     // explicitly so a future contributor cannot quietly switch to a
     // push-based redirect.
-    mockUseAuth.mockReturnValue(
-      makeContext({ status: 'unauthenticated', user: null }),
-    );
+    mockUseAuth.mockReturnValue(makeContext({ status: 'unauthenticated', user: null }));
 
     render(
       <MemoryRouter initialEntries={['/todos']}>
@@ -224,9 +193,7 @@ describe('RequireAuth — replace semantics', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('location').textContent).toBe(
-      '/login?from=/todos',
-    );
+    expect(screen.getByTestId('location').textContent).toBe('/login?from=/todos');
     // Exactly one history slot — the redirect replaced /todos rather
     // than pushing on top of it.
     // MemoryRouter renders the matched route for `/login`, so the

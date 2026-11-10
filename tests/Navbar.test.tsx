@@ -18,6 +18,7 @@ vi.mock('@/auth/useAuth', () => ({
 }));
 
 import { Navbar } from '@/components/Navbar';
+import { userFixture } from './test-fixtures';
 
 beforeEach(() => {
   useAuthMock.mockReset();
@@ -80,13 +81,7 @@ describe('Navbar — unauthenticated state', () => {
 describe('Navbar — authenticated state', () => {
   it('renders the user email and a logout button, no skeleton, no links', () => {
     useAuthMock.mockReturnValue({
-      user: {
-        id: 'u-1',
-        email: 'jane@example.com',
-        name: 'Jane',
-        lastname: 'Doe',
-        birthdate: '1990-05-12',
-      },
+      user: userFixture(),
       status: 'authenticated',
       login: vi.fn(),
       register: vi.fn(),
@@ -129,13 +124,7 @@ describe('Navbar — authenticated state', () => {
     const logoutMock = vi.fn().mockResolvedValue(undefined);
 
     useAuthMock.mockReturnValue({
-      user: {
-        id: 'u-1',
-        email: 'jane@example.com',
-        name: 'Jane',
-        lastname: 'Doe',
-        birthdate: '1990-05-12',
-      },
+      user: userFixture(),
       status: 'authenticated',
       login: vi.fn(),
       register: vi.fn(),
@@ -172,16 +161,7 @@ describe('Navbar — theme toggle', () => {
     'renders the theme toggle when status is %s',
     async (status) => {
       useAuthMock.mockReturnValue({
-        user:
-          status === 'authenticated'
-            ? {
-                id: 'u-1',
-                email: 'jane@example.com',
-                name: 'Jane',
-                lastname: 'Doe',
-                birthdate: null,
-              }
-            : null,
+        user: status === 'authenticated' ? userFixture({ birthdate: null }) : null,
         status,
         login: vi.fn(),
         register: vi.fn(),

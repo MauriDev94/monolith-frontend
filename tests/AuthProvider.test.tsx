@@ -103,15 +103,15 @@ import { axiosClient } from '@/api/axiosClient';
 import MockAdapter from 'axios-mock-adapter';
 import type { MeResponse } from '@/api/authApi';
 import type { AuthContextValue } from '@/auth/AuthContext';
-import { TEST_PASSWORD_LOGIN_OK, TEST_PASSWORD_REGISTER_OK } from './test-fixtures';
+import {
+  TEST_PASSWORD_LOGIN_OK,
+  TEST_PASSWORD_REGISTER_OK,
+  refreshBody,
+  tokenPairFixture,
+  userFixture,
+} from './test-fixtures';
 
-const USER: MeResponse = {
-  id: 'u-1',
-  email: 'jane@example.com',
-  name: 'Jane',
-  lastname: 'Doe',
-  birthdate: '1990-05-12',
-};
+const USER: MeResponse = userFixture();
 
 /**
  * Test probe — captures the latest `useAuth()` value via a callback so
@@ -209,11 +209,7 @@ describe('AuthProvider — login()', () => {
   it('on success: stores token, fetches /me, schedules refresh, navigates', async () => {
     // First /me (mount probe) and second /me (post-login) both return USER.
     apiMeMock.mockResolvedValue(USER);
-    apiLoginMock.mockResolvedValue({
-      access_token: 'fresh-access',
-      refresh_token: 'fresh-refresh',
-      token_type: 'bearer',
-    });
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access', 'fresh-refresh'));
 
     const captured = { current: null as AuthContextValue | null };
     render(
@@ -250,11 +246,7 @@ describe('AuthProvider — login()', () => {
     // Mount probe: no session. Post-login /me: USER.
     apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
-    apiLoginMock.mockResolvedValue({
-      access_token: 'fresh-access',
-      refresh_token: 'fresh-refresh',
-      token_type: 'bearer',
-    });
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access', 'fresh-refresh'));
 
     const captured = { current: null as AuthContextValue | null };
     render(
@@ -352,12 +344,8 @@ describe('AuthProvider — register()', () => {
   it('on success: calls /register then immediately logs the user in', async () => {
     apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
-    apiRegisterMock.mockResolvedValue({ id: 'u-new', email: 'new@example.com' });
-    apiLoginMock.mockResolvedValue({
-      access_token: 'new-access',
-      refresh_token: 'new-refresh',
-      token_type: 'bearer',
-    });
+    apiRegisterMock.mockResolvedValue(userFixture({ id: 'u-new', email: 'new@example.com' }));
+    apiLoginMock.mockResolvedValue(tokenPairFixture('new-access', 'new-refresh'));
 
     const captured = { current: null as AuthContextValue | null };
     render(
@@ -551,7 +539,7 @@ function makeJwt(sub: string): string {
 }
 
 function refreshReply(access: string) {
-  return { data: { tokens: { access_token: access, refresh_token: 'unused' } } };
+  return { data: refreshBody(access) };
 }
 
 function httpError(status: number): AxiosError {

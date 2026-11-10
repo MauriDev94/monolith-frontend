@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
-import { TEST_PASSWORD_LOGIN_OK, TEST_PASSWORD_REGISTER_OK } from './test-fixtures';
+import {
+  TEST_PASSWORD_LOGIN_OK,
+  TEST_PASSWORD_REGISTER_OK,
+  tokenPairFixture,
+  userFixture,
+} from './test-fixtures';
 
 /**
  * Auth-API wrapper tests.
@@ -45,14 +50,7 @@ describe('authApi wrappers', () => {
         expect(config.url).toBe('/auth/v1/login');
         expect(config.headers?.['Content-Type']).toBe('application/x-www-form-urlencoded');
         expect(config.data).toBe(`username=user%40example.com&password=${TEST_PASSWORD_LOGIN_OK}`);
-        return [
-          200,
-          {
-            access_token: 'access-1',
-            refresh_token: 'refresh-1',
-            token_type: 'bearer',
-          },
-        ];
+        return [200, tokenPairFixture('access-1', 'refresh-1')];
       });
 
       const { login } = await import('@/api/authApi');
@@ -64,7 +62,7 @@ describe('authApi wrappers', () => {
       let captured = '';
       mock.onPost('/auth/v1/login').reply((config) => {
         captured = String(config.data);
-        return [200, { access_token: 'a', refresh_token: 'r', token_type: 'b' }];
+        return [200, tokenPairFixture('a', 'r')];
       });
 
       const { login } = await import('@/api/authApi');
@@ -96,18 +94,7 @@ describe('authApi wrappers', () => {
           password: TEST_PASSWORD_REGISTER_OK,
           birthdate: '1990-05-12',
         });
-        return [
-          201,
-          {
-            user: {
-              id: 'u-1',
-              email: 'jane@example.com',
-              name: 'Jane',
-              lastname: 'Doe',
-              birthdate: '1990-05-12',
-            },
-          },
-        ];
+        return [201, { user: userFixture() }];
       });
 
       const { register } = await import('@/api/authApi');
@@ -163,18 +150,7 @@ describe('authApi wrappers', () => {
       mock.onGet('/auth/v1/me').reply((config) => {
         expect(config.method).toBe('get');
         // The backend wraps the user in a `user` envelope; `me()` unwraps it.
-        return [
-          200,
-          {
-            user: {
-              id: 'u-1',
-              email: 'jane@example.com',
-              name: 'Jane',
-              lastname: 'Doe',
-              birthdate: '1990-05-12',
-            },
-          },
-        ];
+        return [200, { user: userFixture() }];
       });
 
       const { me } = await import('@/api/authApi');

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
+import type { Todo } from '@/api/todosApi';
 
 /**
  * Todos-API wrapper tests. Same pattern as `authApi.test.ts`: a fresh module
@@ -20,7 +21,7 @@ const TODO = {
   due_date: null,
   created_at: '2026-10-19T03:00:00Z',
   updated_at: '2026-10-19T03:00:00Z',
-};
+} satisfies Todo;
 
 describe('todosApi wrappers', () => {
   let mock: MockAdapter;
