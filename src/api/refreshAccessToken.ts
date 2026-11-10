@@ -18,11 +18,23 @@ import { authEvents } from '@/auth/authEvents';
  */
 
 /**
- * Thrown when the refreshed token was discarded because the session was torn
- * down while announcing it (the token belongs to a different user). Cleanup
- * already ran, so callers must neither retry nor emit `'unauthorized'`.
+ * Thrown when a refresh result was discarded because the session it belonged
+ * to is gone (see the session epoch in `tokenStore`). Terminal: whoever ended
+ * the session already cleaned up, so callers must neither retry nor emit
+ * `'unauthorized'`.
  */
-export class IdentityChangedError extends Error {
+export class SessionEndedError extends Error {
+  constructor(message = 'The refresh was discarded: its session ended.') {
+    super(message);
+    this.name = 'SessionEndedError';
+  }
+}
+
+/**
+ * The refreshed token was discarded because a listener tore the session down
+ * while announcing it (the token belongs to a different user).
+ */
+export class IdentityChangedError extends SessionEndedError {
   constructor() {
     super('The refreshed token was discarded: the session changed.');
     this.name = 'IdentityChangedError';
@@ -35,10 +47,28 @@ let inflightRefresh: Promise<string> | null = null;
 
 export async function refreshAccessToken(): Promise<string> {
   if (inflightRefresh === null) {
+    // The epoch is captured by the one request that actually goes out. A caller
+    // that joins it from a newer epoch (a login that started meanwhile) may get
+    // SessionEndedError: acceptable, because that request would be answering
+    // the old session's cookie, and a second concurrent refresh is never an
+    // option (locked decision #4).
+    const epoch = tokenStore.epoch();
     inflightRefresh = (async () => {
       try {
         // No body: the refresh token travels in the HttpOnly cookie.
-        const { data } = await refreshClient.post<RefreshTokenResponse>('/auth/v1/refresh');
+        let data: RefreshTokenResponse;
+        try {
+          ({ data } = await refreshClient.post<RefreshTokenResponse>('/auth/v1/refresh'));
+        } catch (err) {
+          // A 401 for a session that already ended is not news: swallowing it
+          // as SessionEndedError keeps callers from emitting 'unauthorized',
+          // which would tear down whatever session replaced it.
+          if (tokenStore.epoch() !== epoch) throw new SessionEndedError();
+          throw err;
+        }
+        // Resolved after logout / a newer login: writing the token would leave
+        // a live credential behind, and the interceptor would retry with it.
+        if (tokenStore.epoch() !== epoch) throw new SessionEndedError();
         const newAccess = data.tokens.access_token;
         tokenStore.set(newAccess);
         // Single place that announces a new token, so the provider

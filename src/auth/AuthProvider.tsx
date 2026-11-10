@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { authEvents } from '@/auth/authEvents';
 import { createRefreshScheduler, type RefreshScheduler } from '@/auth/tokenRefreshScheduler';
 import { tokenStore } from '@/api/tokenStore';
-import { refreshAccessToken, isAuthFailure, IdentityChangedError } from '@/api/refreshAccessToken';
+import { refreshAccessToken, isAuthFailure, SessionEndedError } from '@/api/refreshAccessToken';
 import { decodeJwtSub } from '@/auth/jwtDecode';
 import { queryClient } from '@/api/queryClient';
 import {
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     } catch (err) {
       // Terminal: cleanup already ran and must not be re-armed by a retry.
-      if (err instanceof IdentityChangedError) return;
+      if (err instanceof SessionEndedError) return;
       if (isAuthFailure(err)) {
         authEvents.emit('unauthorized');
         return;
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retryTimer.current = setTimeout(() => {
       retryTimer.current = null;
       refreshAccessToken().catch((err: unknown) => {
-        if (!(err instanceof IdentityChangedError) && isAuthFailure(err)) {
+        if (!(err instanceof SessionEndedError) && isAuthFailure(err)) {
           authEvents.emit('unauthorized');
         }
       });
@@ -134,10 +134,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // `loading` to `authenticated` or `unauthenticated` based on the result.
   useEffect(() => {
     let cancelled = false;
+    // A login or logout during the probe (on a cold Render instance it can take
+    // ~50 s) moves the epoch; the probe's result then belongs to a session that
+    // no longer exists and must not overwrite the current one.
+    const epoch = tokenStore.epoch();
     void (async () => {
       try {
         const me = await apiMe();
-        if (cancelled) return;
+        if (cancelled || tokenStore.epoch() !== epoch) return;
         setUser(me);
         setStatus('authenticated');
         const token = tokenStore.get();
@@ -145,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           scheduler.schedule(token, onRefresh);
         }
       } catch {
-        if (cancelled) return;
+        if (cancelled || tokenStore.epoch() !== epoch) return;
         setUser(null);
         setStatus('unauthenticated');
       }
@@ -162,23 +166,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  // Epoch set by the latest teardown. A login that aborts compares it with the
+  // current epoch to tell "the session was torn down, nothing replaced it"
+  // (revoke the cookie it just got) from "a newer login superseded me" (do not).
+  const endedEpoch = useRef(-1);
+
   // Centralized cleanup. Used by `logout()` AND by the `'unauthorized'`
   // listener so both paths produce identical post-conditions.
-  const cleanup = useCallback(() => {
-    scheduler.cancel();
-    clearRetry();
-    // Refs update synchronously: they otherwise lag until the next render, so
-    // a second event or a refresh landing in the same tick would still see an
-    // authenticated session.
-    statusRef.current = 'unauthenticated';
-    userRef.current = null;
-    tokenStore.clear();
-    // Drop every cached query (todos, …) so the next user who logs in on
-    // this browser never sees the previous user's data, even for a frame.
-    queryClient.clear();
-    setUser(null);
-    setStatus('unauthenticated');
-  }, [scheduler, clearRetry]);
+  //
+  // `endSession` is false only for an `'unauthorized'` with no session: nothing
+  // ended, so the epoch must not move. Bumping would abort a login in flight
+  // for an anonymous failure; a login whose own request was rejected fails with
+  // its own error instead. Stale anonymous failures never get this far (the
+  // interceptor drops requests of an older epoch), so what reaches here belongs
+  // to the current epoch.
+  const cleanup = useCallback(
+    (endSession = true) => {
+      scheduler.cancel();
+      clearRetry();
+      // Refs update synchronously: they otherwise lag until the next render, so
+      // a second event or a refresh landing in the same tick would still see an
+      // authenticated session.
+      statusRef.current = 'unauthenticated';
+      userRef.current = null;
+      // Invalidate every async flow still in flight for the session that just
+      // ended (probe, login, refresh) before clearing, so none can write back.
+      if (endSession) endedEpoch.current = tokenStore.bumpEpoch();
+      tokenStore.clear();
+      // Drop every cached query (todos, …) so the next user who logs in on
+      // this browser never sees the previous user's data, even for a frame.
+      queryClient.clear();
+      setUser(null);
+      setStatus('unauthenticated');
+    },
+    [scheduler, clearRetry],
+  );
 
   // Subscribe to `authEvents` so the 401 interceptor can tear the SPA
   // down when refresh fails. The unsubscribe is returned by `on()`.
@@ -191,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return authEvents.on('unauthorized', () => {
       const hadSession = statusRef.current === 'authenticated';
-      cleanup();
+      cleanup(hadSession);
       if (hadSession) {
         navigate('/login', { replace: true });
       }
@@ -234,15 +256,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (values: LoginValues, from?: string): Promise<void> => {
+      // The epoch moves only when a session is actually established (below),
+      // not when an attempt starts: a failed login (wrong password, network)
+      // must leave the bootstrap probe and any running session untouched, or
+      // the probe would drop its result and status would stay 'loading'.
+      const startEpoch = tokenStore.epoch();
+      let epoch = startEpoch;
+      // Quiet abort: the session we were building was torn down. Resolve (not
+      // reject) so the form just stops its spinner, with no toast or error.
+      // The login response already set a refresh cookie that a reload would
+      // turn back into a session, so revoke it, but only when nothing replaced
+      // the torn-down session. A newer login (double submit) owns the cookie
+      // now, and the backend logout revokes every refresh token of the user.
+      const abort = () => {
+        if (tokenStore.epoch() === endedEpoch.current) {
+          void apiLogout().catch(() => {
+            // Best effort; the local session is gone either way.
+          });
+        }
+      };
       try {
         const { access_token } = await apiLogin(values);
+        if (tokenStore.epoch() !== startEpoch) return abort();
+        epoch = tokenStore.bumpEpoch();
         tokenStore.set(access_token);
         const meUser = await apiMe();
+        if (tokenStore.epoch() !== epoch) return abort();
         setUser(meUser);
         setStatus('authenticated');
         scheduler.schedule(access_token, onRefresh);
         navigate(from ?? '/todos', { replace: true });
       } catch (err) {
+        // The session ended while we awaited: whatever failed is moot.
+        if (tokenStore.epoch() !== epoch) return;
         // The 401 interceptor may have ALREADY fired `cleanup()` via the
         // `'unauthorized'` event (when the refresh attempt itself 401'd).
         // Our job here is to surface a localized error so the form knows

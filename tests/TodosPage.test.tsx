@@ -309,6 +309,30 @@ describe('TodosPage — complete', () => {
     expect(two).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('keeps the list refetch started by a create when a toggle cancels it', async () => {
+    // The toggle cancels in-flight list fetches to protect its optimistic flip;
+    // the refetch that was meant to show the new quest must not be lost.
+    listTodosMock.mockResolvedValueOnce(page([todo(1)], 1));
+    const refetch = deferred<TodosPageData>();
+    listTodosMock.mockReturnValueOnce(refetch.promise);
+    listTodosMock.mockResolvedValue(page([todo(1, { is_completed: true }), todo(2)], 2));
+    createTodoMock.mockResolvedValue(todo(2));
+    updateTodoMock.mockResolvedValue(todo(1, { is_completed: true }));
+
+    renderPage();
+    const checkbox = await seal('Misión 1');
+    await user.type(screen.getByLabelText('Nombre de la misión'), 'Misión 2');
+    await user.click(screen.getByRole('button', { name: 'Agregar misión' }));
+    await waitFor(() => expect(listTodosMock).toHaveBeenCalledTimes(2));
+
+    // Toggle while the refetch is still in flight.
+    await user.click(checkbox);
+    await waitFor(() => expect(updateTodoMock).toHaveBeenCalled());
+
+    expect(await screen.findByText('Misión 2')).toBeInTheDocument();
+    expect(checkbox).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('ignores clicks while the quest is saving', async () => {
     listTodosMock.mockResolvedValue(page([todo(1)], 1));
     updateTodoMock.mockReturnValue(new Promise(() => {}));

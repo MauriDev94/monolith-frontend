@@ -17,6 +17,15 @@
 
 let accessToken: string | null = null;
 
+/**
+ * Session epoch: bumped whenever a session ends (logout, forced logout,
+ * identity switch) or a new one starts (login). Async auth flows capture it
+ * before they await and drop their result if it moved, so a flow that belongs
+ * to an ended session can never write into the next one (a late `/me` probe, a
+ * refresh that resolves after logout, a login interrupted by a logout).
+ */
+let sessionEpoch = 0;
+
 export const tokenStore = {
   get(): string | null {
     return accessToken;
@@ -26,5 +35,13 @@ export const tokenStore = {
   },
   clear(): void {
     accessToken = null;
+  },
+  epoch(): number {
+    return sessionEpoch;
+  },
+  /** Returns the new epoch, for flows that start a session and own it. */
+  bumpEpoch(): number {
+    sessionEpoch += 1;
+    return sessionEpoch;
   },
 } as const;
