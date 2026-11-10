@@ -1,6 +1,6 @@
 # ADR 0002 — Cross-site refresh cookie between Vercel and Render
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0004](0004-same-origin-api-proxy.md)
 - **Date:** 2026-10-20
 
 ## Context
