@@ -53,6 +53,16 @@ export function useCreateTodo() {
  * success. On failure only this quest is rolled back, not a snapshot of the
  * whole list, so toggling two quests quickly cannot undo the other one; the
  * list is then refetched in case the quest changed or vanished server-side.
+ *
+ * `onMutate` cancels in-flight list fetches so a stale response cannot
+ * overwrite the optimistic flip. That would also kill the refetch a create
+ * just started (the new quest would not show up until some later refetch), so
+ * when a fetch was in flight the list is invalidated again once the toggle
+ * settles.
+ *
+ * Accepted narrow race: if a second toggle starts while that invalidation's
+ * refetch is in flight, the refetch can briefly overwrite the second quest's
+ * optimistic flip until its own `onSuccess` lands. Not worth extra machinery.
  */
 export function useToggleTodo() {
   const queryClient = useQueryClient();
@@ -65,10 +75,20 @@ export function useToggleTodo() {
         due_date: todo.due_date,
       }),
     onMutate: async (todo) => {
+      // Read before cancelling: afterwards nothing is fetching any more.
+      const listWasFetching = queryClient.isFetching({ queryKey: todosQueryKey }) > 0;
       await queryClient.cancelQueries({ queryKey: todosQueryKey });
       replaceTodo(queryClient, { ...todo, is_completed: !todo.is_completed });
+      return { listWasFetching };
     },
     onSuccess: (saved) => replaceTodo(queryClient, saved),
+    // Restart the fetch the cancel dropped. On error `onError` already
+    // invalidates, so this covers only the success path.
+    onSettled: (_saved, err, _todo, context) => {
+      if (err === null && context?.listWasFetching) {
+        void queryClient.invalidateQueries({ queryKey: todosQueryKey });
+      }
+    },
     onError: (_err, todo) => {
       replaceTodo(queryClient, todo);
       void queryClient.invalidateQueries({ queryKey: todosQueryKey });

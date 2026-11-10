@@ -816,6 +816,445 @@ describe('AuthProvider — proactive refresh failures', () => {
   });
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const CREDENTIALS = { email: 'jane@example.com', password: TEST_PASSWORD_LOGIN_OK };
+
+function renderAnonymousProbePending() {
+  const probe = deferred<MeResponse>();
+  apiMeMock.mockReturnValueOnce(probe.promise);
+  const captured = { current: null as AuthContextValue | null };
+  render(
+    <AuthProvider>
+      <CaptureAuth onValue={(v) => (captured.current = v)} />
+    </AuthProvider>,
+  );
+  return { probe, captured };
+}
+
+describe('AuthProvider — a late bootstrap probe must not undo a login', () => {
+  // On a cold Render instance the mount /me can take ~50 s, so the user may
+  // log in while it is still in flight.
+  it('ignores a probe failure (and its refresh 401) that lands after login', async () => {
+    // Drive the probe through the real interceptor: /me 401s, the refresh is
+    // held open, and only then does the user log in.
+    const refresh = deferred<never>();
+    refreshPostMock.mockReturnValue(refresh.promise);
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/auth/v1/me').reply(401);
+    let probeCall!: Promise<unknown>;
+    apiMeMock.mockImplementationOnce(() => (probeCall = axiosClient.get('/auth/v1/me')));
+    const captured = { current: null as AuthContextValue | null };
+    render(
+      <AuthProvider>
+        <CaptureAuth onValue={(v) => (captured.current = v)} />
+      </AuthProvider>,
+    );
+    await vi.waitFor(() => expect(refreshPostMock).toHaveBeenCalledTimes(1));
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access'));
+    apiMeMock.mockResolvedValue(USER);
+
+    await act(async () => {
+      await getCaptured(captured).login(CREDENTIALS);
+    });
+    expect(getCaptured(captured).status).toBe('authenticated');
+    navigateMock.mockClear();
+
+    await act(async () => {
+      refresh.reject(httpError(401));
+      // The probe settling proves the rejection went through the interceptor.
+      await probeCall.catch(() => undefined);
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(getCaptured(captured).user).toEqual(USER);
+    expect(tokenStore.get()).toBe('fresh-access');
+    expect(navigateMock).not.toHaveBeenCalled();
+    http.restore();
+  });
+
+  it('ignores a stale probe success that lands after login', async () => {
+    const { probe, captured } = renderAnonymousProbePending();
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access'));
+    apiMeMock.mockResolvedValue(USER);
+
+    await act(async () => {
+      await getCaptured(captured).login(CREDENTIALS);
+    });
+    scheduleMock.mockClear();
+
+    await act(async () => {
+      probe.resolve(userFixture({ id: 'u-stale' }));
+      await probe.promise;
+    });
+
+    expect(getCaptured(captured).user).toEqual(USER);
+    expect(scheduleMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthProvider — a refresh in flight when the session ends', () => {
+  it('leaves the token store empty and does not retry the request after logout', async () => {
+    const { captured } = await renderAuthenticated();
+    const refresh = deferred<{ data: ReturnType<typeof refreshBody> }>();
+    refreshPostMock.mockReturnValue(refresh.promise);
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/todos').replyOnce(401).onGet('/todos').reply(200, { ok: 1 });
+
+    let request!: Promise<unknown>;
+    await act(async () => {
+      request = axiosClient.get('/todos').catch((e: unknown) => e);
+      await vi.waitFor(() => expect(refreshPostMock).toHaveBeenCalledTimes(1));
+      await getCaptured(captured).logout();
+    });
+    scheduleMock.mockClear();
+
+    await act(async () => {
+      refresh.resolve(refreshReply(makeJwt(USER.id)));
+      await request;
+    });
+
+    expect(tokenStore.get()).toBeNull();
+    expect(http.history.get).toHaveLength(1);
+    expect(await request).toMatchObject({ response: { status: 401 } });
+    expect(scheduleMock).not.toHaveBeenCalled();
+    http.restore();
+  });
+
+  it('does not end a newer session when the old refresh is rejected after a new login', async () => {
+    const { captured } = await renderAuthenticated();
+    const refresh = deferred<never>();
+    refreshPostMock.mockReturnValue(refresh.promise);
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/todos').reply(401);
+
+    let request!: Promise<unknown>;
+    await act(async () => {
+      request = axiosClient.get('/todos').catch((e: unknown) => e);
+      await vi.waitFor(() => expect(refreshPostMock).toHaveBeenCalledTimes(1));
+      await getCaptured(captured).logout();
+      apiLoginMock.mockResolvedValue(tokenPairFixture('second-access'));
+      await getCaptured(captured).login(CREDENTIALS);
+    });
+    expect(getCaptured(captured).status).toBe('authenticated');
+    navigateMock.mockClear();
+
+    await act(async () => {
+      refresh.reject(httpError(401));
+      await request;
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(tokenStore.get()).toBe('second-access');
+    expect(navigateMock).not.toHaveBeenCalled();
+    http.restore();
+  });
+});
+
+describe('AuthProvider — a request from an ended session never refreshes', () => {
+  /** Mount with a probe that goes through the real interceptor and 401s on demand. */
+  async function renderWithGatedProbe() {
+    const gate = deferred<void>();
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/auth/v1/me').reply(async () => {
+      await gate.promise;
+      return [401];
+    });
+    let probeCall!: Promise<unknown>;
+    apiMeMock.mockImplementationOnce(() => (probeCall = axiosClient.get('/auth/v1/me')));
+    const captured = { current: null as AuthContextValue | null };
+    render(
+      <AuthProvider>
+        <CaptureAuth onValue={(v) => (captured.current = v)} />
+      </AuthProvider>,
+    );
+    const probeSettled = () => probeCall.catch(() => undefined);
+    // Let the probe leave (axios runs request interceptors in a microtask) so it
+    // is tagged with the anonymous epoch before the login bumps it.
+    await vi.waitFor(() => expect(http.history.get).toHaveLength(1));
+    return { gate, http, captured, probeSettled };
+  }
+
+  // Cold start: the probe's 401 and its refresh 401 both land while the slow
+  // login (Argon2) is still in flight. They belong to the anonymous visit and
+  // must not abort the login.
+  it('lets a login finish when the probe 401s and its refresh fails before /login answers', async () => {
+    const { gate, http, captured, probeSettled } = await renderWithGatedProbe();
+    refreshPostMock.mockRejectedValue(httpError(401));
+    const loginCall = deferred<ReturnType<typeof tokenPairFixture>>();
+    apiLoginMock.mockReturnValue(loginCall.promise);
+    apiMeMock.mockResolvedValue(USER);
+
+    let result!: Promise<void>;
+    await act(async () => {
+      result = getCaptured(captured).login(CREDENTIALS);
+      gate.resolve();
+      // The probe settling means its 401 went through the interceptor; a wrongly
+      // started refresh would already have hit the client by now.
+      await probeSettled();
+    });
+    // No login has been established yet, so the epoch has not moved: the probe
+    // legitimately refreshes (and fails), and that anonymous teardown must not
+    // abort the login that is still waiting for /login.
+    expect(refreshPostMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      loginCall.resolve(tokenPairFixture('fresh-access'));
+      await result;
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(getCaptured(captured).user).toEqual(USER);
+    expect(tokenStore.get()).toBe('fresh-access');
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+    expect(navigateMock).toHaveBeenCalledWith('/todos', { replace: true });
+    http.restore();
+  });
+
+  it('lets a login finish when the probe 401s after /login answered but before /me does', async () => {
+    const { gate, http, captured, probeSettled } = await renderWithGatedProbe();
+    refreshPostMock.mockRejectedValue(httpError(401));
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access'));
+    const meCall = deferred<MeResponse>();
+    apiMeMock.mockReturnValue(meCall.promise);
+
+    let result!: Promise<void>;
+    await act(async () => {
+      result = getCaptured(captured).login(CREDENTIALS);
+      await vi.waitFor(() => expect(apiMeMock).toHaveBeenCalledTimes(2));
+      gate.resolve();
+      await probeSettled();
+    });
+    expect(refreshPostMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      meCall.resolve(USER);
+      await result;
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(getCaptured(captured).user).toEqual(USER);
+    expect(navigateMock).toHaveBeenCalledWith('/todos', { replace: true });
+    http.restore();
+  });
+
+  it('sends no refresh for a request that 401s after the session was replaced', async () => {
+    const { captured } = await renderAuthenticated();
+    const gate = deferred<void>();
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/todos').reply(async () => {
+      await gate.promise;
+      return [401];
+    });
+
+    let request!: Promise<unknown>;
+    await act(async () => {
+      request = axiosClient.get('/todos').catch((e: unknown) => e);
+      await vi.waitFor(() => expect(http.history.get).toHaveLength(1));
+      await getCaptured(captured).logout();
+      apiLoginMock.mockResolvedValue(tokenPairFixture('second-access'));
+      await getCaptured(captured).login(CREDENTIALS);
+    });
+
+    await act(async () => {
+      gate.resolve();
+      await request;
+    });
+
+    expect(refreshPostMock).not.toHaveBeenCalled();
+    expect(await request).toMatchObject({ response: { status: 401 } });
+    expect(http.history.get).toHaveLength(1);
+    expect(getCaptured(captured).status).toBe('authenticated');
+    http.restore();
+  });
+
+  it('sends no refresh for a request that 401s after logout', async () => {
+    const { captured } = await renderAuthenticated();
+    const gate = deferred<void>();
+    const http = new MockAdapter(axiosClient);
+    http.onGet('/todos').reply(async () => {
+      await gate.promise;
+      return [401];
+    });
+
+    let request!: Promise<unknown>;
+    await act(async () => {
+      request = axiosClient.get('/todos').catch((e: unknown) => e);
+      await vi.waitFor(() => expect(http.history.get).toHaveLength(1));
+      await getCaptured(captured).logout();
+      gate.resolve();
+      await request;
+    });
+
+    expect(refreshPostMock).not.toHaveBeenCalled();
+    expect(await request).toMatchObject({ response: { status: 401 } });
+    http.restore();
+  });
+});
+
+describe('AuthProvider — a failed login must not disturb what is already running', () => {
+  it('lets the probe settle as unauthenticated when login fails before the probe answers', async () => {
+    const { probe, captured } = renderAnonymousProbePending();
+    apiLoginMock.mockRejectedValue(httpError(401));
+
+    await act(async () => {
+      await expect(getCaptured(captured).login(CREDENTIALS)).rejects.toBeDefined();
+    });
+    await act(async () => {
+      probe.reject(httpError(401));
+      await probe.promise.catch(() => undefined);
+    });
+
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+  });
+
+  it('lets the probe authenticate when login fails but the cookie was valid', async () => {
+    const { probe, captured } = renderAnonymousProbePending();
+    apiLoginMock.mockRejectedValue(httpError(401));
+    tokenStore.set('cookie-access');
+
+    await act(async () => {
+      await expect(getCaptured(captured).login(CREDENTIALS)).rejects.toBeDefined();
+    });
+    await act(async () => {
+      probe.resolve(USER);
+      await probe.promise;
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(getCaptured(captured).user).toEqual(USER);
+    expect(scheduleMock).toHaveBeenCalledWith('cookie-access', expect.any(Function));
+  });
+
+  it('keeps the session and its timer when an authenticated user submits a failing login', async () => {
+    const { captured } = await renderAuthenticated();
+    apiLoginMock.mockRejectedValue(httpError(401));
+    const epochBefore = tokenStore.epoch();
+
+    await act(async () => {
+      await expect(getCaptured(captured).login(CREDENTIALS)).rejects.toBeDefined();
+    });
+
+    expect(getCaptured(captured).status).toBe('authenticated');
+    expect(getCaptured(captured).user).toEqual(USER);
+    expect(cancelMock).not.toHaveBeenCalled();
+    expect(tokenStore.epoch()).toBe(epochBefore);
+  });
+});
+
+describe('AuthProvider — an aborted login revokes the cookie it created', () => {
+  it('logs out on the server when a logout landed while /login was pending', async () => {
+    const { captured } = await renderAuthenticated();
+    const loginCall = deferred<ReturnType<typeof tokenPairFixture>>();
+    apiLoginMock.mockReturnValue(loginCall.promise);
+
+    let result!: Promise<void>;
+    await act(async () => {
+      result = getCaptured(captured).login(CREDENTIALS);
+      await getCaptured(captured).logout();
+    });
+    expect(apiLogoutMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      loginCall.resolve(tokenPairFixture('late-access'));
+      await result;
+    });
+
+    // The late response set a refresh cookie that a reload would resurrect.
+    expect(apiLogoutMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not log out when a newer login superseded this one (double submit)', async () => {
+    const { captured } = await renderAuthenticated();
+    const first = deferred<ReturnType<typeof tokenPairFixture>>();
+    const second = deferred<ReturnType<typeof tokenPairFixture>>();
+    apiLoginMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    let a!: Promise<void>;
+    let b!: Promise<void>;
+    await act(async () => {
+      a = getCaptured(captured).login(CREDENTIALS);
+      b = getCaptured(captured).login(CREDENTIALS);
+    });
+    await act(async () => {
+      second.resolve(tokenPairFixture('winner-access'));
+      await b;
+    });
+    await act(async () => {
+      first.resolve(tokenPairFixture('loser-access'));
+      await a;
+    });
+
+    // The backend logout revokes every refresh token of the user, the winner's too.
+    expect(apiLogoutMock).not.toHaveBeenCalled();
+    expect(tokenStore.get()).toBe('winner-access');
+    expect(getCaptured(captured).status).toBe('authenticated');
+  });
+});
+
+describe('AuthProvider — the session ends while login() is awaiting', () => {
+  it('aborts quietly when the user logs out before the credentials answer', async () => {
+    const { captured } = await renderAuthenticated();
+    const loginCall = deferred<ReturnType<typeof tokenPairFixture>>();
+    apiLoginMock.mockReturnValue(loginCall.promise);
+
+    let result!: Promise<void>;
+    await act(async () => {
+      result = getCaptured(captured).login(CREDENTIALS);
+      await getCaptured(captured).logout();
+    });
+    navigateMock.mockClear();
+    scheduleMock.mockClear();
+
+    await act(async () => {
+      loginCall.resolve(tokenPairFixture('late-access'));
+      await result;
+    });
+
+    expect(tokenStore.get()).toBeNull();
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+    expect(getCaptured(captured).user).toBeNull();
+    expect(scheduleMock).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts quietly when a forced logout lands between the token and /me', async () => {
+    const { captured } = await renderAuthenticated();
+    apiLoginMock.mockResolvedValue(tokenPairFixture('late-access'));
+    const meCall = deferred<MeResponse>();
+    apiMeMock.mockReturnValue(meCall.promise);
+
+    let result!: Promise<void>;
+    await act(async () => {
+      result = getCaptured(captured).login(CREDENTIALS);
+      await vi.waitFor(() => expect(apiMeMock).toHaveBeenCalledTimes(2));
+      authEvents.emit('unauthorized');
+    });
+    navigateMock.mockClear();
+    scheduleMock.mockClear();
+
+    await act(async () => {
+      meCall.resolve(USER);
+      await result;
+    });
+
+    expect(tokenStore.get()).toBeNull();
+    expect(getCaptured(captured).status).toBe('unauthenticated');
+    expect(getCaptured(captured).user).toBeNull();
+    expect(scheduleMock).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('useAuth', () => {
   it('throws when called outside an AuthProvider', () => {
     // Suppress React's error-boundary noise from the expected throw.
