@@ -209,7 +209,7 @@ describe('AuthProvider — login()', () => {
   it('on success: stores token, fetches /me, schedules refresh, navigates', async () => {
     // First /me (mount probe) and second /me (post-login) both return USER.
     apiMeMock.mockResolvedValue(USER);
-    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access', 'fresh-refresh'));
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access'));
 
     const captured = { current: null as AuthContextValue | null };
     render(
@@ -246,7 +246,7 @@ describe('AuthProvider — login()', () => {
     // Mount probe: no session. Post-login /me: USER.
     apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
-    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access', 'fresh-refresh'));
+    apiLoginMock.mockResolvedValue(tokenPairFixture('fresh-access'));
 
     const captured = { current: null as AuthContextValue | null };
     render(
@@ -345,7 +345,7 @@ describe('AuthProvider — register()', () => {
     apiMeMock.mockImplementationOnce(() => Promise.reject(new Error('no session')));
     apiMeMock.mockResolvedValue(USER);
     apiRegisterMock.mockResolvedValue(userFixture({ id: 'u-new', email: 'new@example.com' }));
-    apiLoginMock.mockResolvedValue(tokenPairFixture('new-access', 'new-refresh'));
+    apiLoginMock.mockResolvedValue(tokenPairFixture('new-access'));
 
     const captured = { current: null as AuthContextValue | null };
     render(

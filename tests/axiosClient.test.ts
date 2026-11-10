@@ -91,7 +91,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let refreshCalls = 0;
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
-      return [200, refreshBody('new-access', 'new-refresh')];
+      return [200, refreshBody('new-access')];
     });
 
     mock.onGet('/a').replyOnce(401).onGet('/a').reply(200, { ok: 1 });
@@ -150,7 +150,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let capturedBody: unknown;
     refreshMock.onPost('/auth/v1/refresh').reply((config) => {
       capturedBody = config.data;
-      return [200, refreshBody('new-access', 'new-refresh')];
+      return [200, refreshBody('new-access')];
     });
     mock.onGet('/me').replyOnce(401).onGet('/me').reply(200, {});
 
@@ -162,7 +162,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
   it('does not loop forever when the retry itself 401s', async () => {
     tokenStore.set('old-access');
 
-    refreshMock.onPost('/auth/v1/refresh').reply(200, refreshBody('new-access', 'new-refresh'));
+    refreshMock.onPost('/auth/v1/refresh').reply(200, refreshBody('new-access'));
     mock.onGet('/forever').reply(401);
 
     await expect(axiosClient.get('/forever')).rejects.toThrow();
@@ -175,7 +175,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
       if (refreshCalls === 1) return [401];
-      return [200, refreshBody('later-access', 'later-refresh')];
+      return [200, refreshBody('later-access')];
     });
 
     // First 401 — first GET /x (refresh fails, request rejected).
@@ -198,7 +198,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let refreshCalls = 0;
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
-      return [200, refreshBody('x', 'y')];
+      return [200, refreshBody('x')];
     });
     mock.onGet('/server-error').reply(500);
 
@@ -212,7 +212,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let refreshCalls = 0;
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
-      return [200, refreshBody('x', 'y')];
+      return [200, refreshBody('x')];
     });
     mock.onGet('/network').networkError();
 
@@ -230,7 +230,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
       let refreshCalls = 0;
       refreshMock.onPost('/auth/v1/refresh').reply(() => {
         refreshCalls += 1;
-        return [200, refreshBody('x', 'y')];
+        return [200, refreshBody('x')];
       });
       mock.onPost(path).reply(401);
 
@@ -261,7 +261,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     const onUnauth = vi.fn();
     const off = authEvents.on('unauthorized', onUnauth);
 
-    refreshMock.onPost('/auth/v1/refresh').reply(200, refreshBody('new-access', 'new-refresh'));
+    refreshMock.onPost('/auth/v1/refresh').reply(200, refreshBody('new-access'));
     mock.onGet('/flaky').replyOnce(401).onGet('/flaky').reply(500);
 
     await expect(axiosClient.get('/flaky')).rejects.toMatchObject({
@@ -284,7 +284,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     refreshMock.onPost('/auth/v1/refresh').reply(async () => {
       refreshCalls += 1;
       await new Promise((r) => setTimeout(r, 20));
-      return [200, refreshBody('new-access', 'new-refresh')];
+      return [200, refreshBody('new-access')];
     });
     mock.onGet('/todos').replyOnce(401).onGet('/todos').reply(200, { ok: 1 });
 
@@ -300,7 +300,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     const onRefreshed = vi.fn();
     const off = authEvents.on('refreshed', onRefreshed);
 
-    refreshMock.onPost('/auth/v1/refresh').reply(200, refreshBody('new-access', 'new-refresh'));
+    refreshMock.onPost('/auth/v1/refresh').reply(200, refreshBody('new-access'));
     mock.onGet('/me').replyOnce(401).onGet('/me').reply(200, {});
 
     await axiosClient.get('/me');
@@ -318,7 +318,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let refreshCalls = 0;
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
-      return [200, refreshBody('other-access', 'x')];
+      return [200, refreshBody('other-access')];
     });
     mock.onGet('/slow').reply(() => {
       tokenStore.clear();
@@ -336,7 +336,7 @@ describe('axiosClient — single-flight 401 interceptor', () => {
     let refreshCalls = 0;
     refreshMock.onPost('/auth/v1/refresh').reply(() => {
       refreshCalls += 1;
-      return [200, refreshBody('cookie-access', 'x')];
+      return [200, refreshBody('cookie-access')];
     });
     mock.onGet('/me').replyOnce(401).onGet('/me').reply(200, { id: 'u-1' });
 

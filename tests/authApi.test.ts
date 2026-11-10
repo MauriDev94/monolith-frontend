@@ -50,7 +50,7 @@ describe('authApi wrappers', () => {
         expect(config.url).toBe('/auth/v1/login');
         expect(config.headers?.['Content-Type']).toBe('application/x-www-form-urlencoded');
         expect(config.data).toBe(`username=user%40example.com&password=${TEST_PASSWORD_LOGIN_OK}`);
-        return [200, tokenPairFixture('access-1', 'refresh-1')];
+        return [200, tokenPairFixture('access-1')];
       });
 
       const { login } = await import('@/api/authApi');
@@ -62,7 +62,7 @@ describe('authApi wrappers', () => {
       let captured = '';
       mock.onPost('/auth/v1/login').reply((config) => {
         captured = String(config.data);
-        return [200, tokenPairFixture('a', 'r')];
+        return [200, tokenPairFixture('a')];
       });
 
       const { login } = await import('@/api/authApi');
